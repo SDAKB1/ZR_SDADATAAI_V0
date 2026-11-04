@@ -5,14 +5,15 @@
   "private": true,
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test-connection": "node test-connection.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@sap-rfc/node-rfc-library": "^1.1.2",
+    "open-rfc": "^0.2.5",
     "express": "^4.19.2",
     "basic-auth": "^2.0.1",
     "zod": "^3.23.8"

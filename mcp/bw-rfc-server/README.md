@@ -10,12 +10,22 @@ SDADATAAI's own CAP backend) call SAP RFCs/BAPIs by name on the
 **SDADATAAI** system — e.g. BW metadata/extract RFCs needed for the BW
 migration cockpit.
 
+Built on [`open-rfc`](https://github.com/marianfoo/open-rfc) — public npm,
+zero runtime dependencies, no SAP NW RFC SDK, no private registry token.
+It's 0.x/beta software with no production SLA, which is fine for a short
+demo but worth re-checking if this becomes long-lived.
+
+**Current deploy has no public route** (`no-route: true` in
+`manifest.yml` — `lab-sda_Space`'s CF route quota is maxed at 30/30).
+Use `test-connection.js` via `cf run-task` (below) to verify/use it for
+now; add a real route deliberately later if the CAP backend needs to
+reach it over HTTP from outside this space.
+
 ## Option A — Connect to it as a remote MCP server (Claude Desktop / Claude Code)
 
-Once deployed, the server is reachable at a CF route ending in `/mcp`
-(confirm the exact URL with `cf app sdadataai-bw-rfc-mcp` — defaults to
-`https://sdadataai-bw-rfc-mcp.cfapps.us10.hana.ondemand.com/mcp`, but CF
-may have suffixed it if that route was already taken).
+Needs a public route first (see above — not deployed yet). Once one
+exists, the server is reachable at a CF route ending in `/mcp` (confirm
+the exact URL with `cf app sdadataai-bw-rfc-mcp`).
 
 Every request needs **HTTP Basic Auth**. Ask whoever deployed the server
 for the current username/password (don't assume the placeholder
@@ -72,16 +82,24 @@ Requires three environment variables on whatever app is calling it:
 ```bash
 cd mcp/bw-rfc-server
 cp .env.example .env   # fill in real values — never commit .env
-npm install            # needs SAP_NPM_REGISTRY_TOKEN set first, see below
+npm install
 npm start
 curl http://localhost:8080/health   # should return "ok"
 ```
 
-`npm install` pulls `@sap-rfc/node-rfc-library` from SDA's private npm
-feed (configured in `.npmrc`, scoped to `@sap-rfc`) — set
-`SAP_NPM_REGISTRY_TOKEN` in your shell before running `npm install`, or
-it will 404. Ask whoever manages SDA's private npm feed for the token if
-you don't already have it from another SDA project.
+No registry token needed — `open-rfc` installs straight from public npm.
+
+## Verifying the live connection without a public route
+
+```bash
+cf run-task sdadataai-bw-rfc-mcp --command "node test-connection.js" --name bw-test
+cf logs sdadataai-bw-rfc-mcp --recent
+```
+
+`test-connection.js` opens a connection using the `SDADATAAI_SAP_*` env
+vars already set on the app and calls `BAPI_CUBE_GETLIST` directly
+(bypassing the MCP/HTTP layer entirely), printing the row count and
+first 5 cubes to the task's log output.
 
 ## Deploying/redeploying to Cloud Foundry
 
@@ -96,7 +114,6 @@ just return a clear "not configured" error from `call_rfc`/
 `get_rfc_metadata` until those are set:
 
 ```bash
-cf set-env sdadataai-bw-rfc-mcp SAP_NPM_REGISTRY_TOKEN '<token>'
 cf set-env sdadataai-bw-rfc-mcp SDADATAAI_SAP_ASHOST '<host>'
 cf set-env sdadataai-bw-rfc-mcp SDADATAAI_SAP_SYSNR '00'
 cf set-env sdadataai-bw-rfc-mcp SDADATAAI_SAP_CLIENT '<client>'

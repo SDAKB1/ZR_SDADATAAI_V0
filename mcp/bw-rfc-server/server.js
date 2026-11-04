@@ -7,11 +7,16 @@
  * the "SDADATAAI" system, with connection params supplied entirely via
  * environment variables. There is no way to call an arbitrary SAP host
  * through this server, and no other system name is recognized at all.
+ *
+ * Uses `open-rfc` (public npm, zero runtime dependencies, no SAP NW RFC SDK
+ * and no private registry token needed) instead of a vendor-specific RFC
+ * library. It's 0.x/beta software with no production SLA -- acceptable for
+ * a short demo, but verify real calls work before relying on it further.
  */
 
 const express = require('express');
 const basicAuth = require('basic-auth');
-const { RFCClient } = require('@sap-rfc/node-rfc-library');
+const { Client } = require('open-rfc');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const { z } = require('zod');
@@ -29,7 +34,8 @@ function systemFromEnv(prefix) {
     sysnr: process.env[`${prefix}_SAP_SYSNR`] || '00',
     client: process.env[`${prefix}_SAP_CLIENT`],
     user: process.env[`${prefix}_SAP_USER`],
-    passwd: process.env[`${prefix}_SAP_PASSWD`]
+    passwd: process.env[`${prefix}_SAP_PASSWD`],
+    lang: process.env[`${prefix}_SAP_LANG`] || 'EN'
   };
 }
 
@@ -78,12 +84,12 @@ function requireBasicAuth(req, res, next) {
 
 async function withRfcConnection(systemName, fn) {
   const connectionParams = getSystemConnectionParams(systemName);
-  const client = new RFCClient();
-  const connection = await client.open(connectionParams);
+  const client = new Client(connectionParams, { timeout: 30 });
+  await client.open();
   try {
-    return await fn(connection);
+    return await fn(client);
   } finally {
-    await connection.close();
+    await client.close();
   }
 }
 
@@ -101,7 +107,7 @@ function buildMcpServer() {
     'result, including nested structures/tables, directly as tool output.',
     {
       system: z.enum(['SDADATAAI']).describe('The only allowlisted system.'),
-      rfc_name: z.string().describe('The RFC/BAPI name to execute, e.g. RSA1_ODSO_GET_DETAIL.'),
+      rfc_name: z.string().describe('The RFC/BAPI name to execute, e.g. BAPI_CUBE_GETLIST.'),
       import_parameters: z.record(z.any()).optional().default({})
         .describe('Import parameters for the RFC.'),
       changing_parameters: z.record(z.any()).optional().default({})
@@ -111,13 +117,11 @@ function buildMcpServer() {
     },
     async ({ system, rfc_name, import_parameters, changing_parameters, table_parameters }) => {
       try {
-        const result = await withRfcConnection(system, (connection) =>
-          connection.execute(rfc_name, {
-            import: import_parameters,
-            changing: changing_parameters,
-            table: table_parameters
-          })
-        );
+        // open-rfc's call() takes one flat parameter object keyed by ABAP
+        // parameter name (import/changing/table are not separate buckets at
+        // the wire level) and returns a flat result object the same way.
+        const input = { ...import_parameters, ...changing_parameters, ...table_parameters };
+        const result = await withRfcConnection(system, (client) => client.call(rfc_name, input));
         return { content: [{ type: 'text', text: JSON.stringify(result) }] };
       } catch (err) {
         return {
@@ -138,9 +142,7 @@ function buildMcpServer() {
     },
     async ({ system, rfc_name }) => {
       try {
-        const metadata = await withRfcConnection(system, (connection) =>
-          connection.getMetadata(rfc_name)
-        );
+        const metadata = await withRfcConnection(system, (client) => client.getFunctionInterface(rfc_name));
         return { content: [{ type: 'text', text: JSON.stringify(metadata) }] };
       } catch (err) {
         return {

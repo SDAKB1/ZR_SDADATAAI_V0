@@ -4,7 +4,7 @@ applications:
     path: .
     buildpacks:
       - nodejs_buildpack
-    memory: 256M
+    memory: 64M
     instances: 1
     health-check-type: http
     health-check-http-endpoint: /health
@@ -19,4 +19,4 @@ applications:
       MCP_USER_2: SAIREDDY
       MCP_PASS_2: SAIREDDY
       # Set these before first use (cf set-env, then cf restage), not committed here:
-      # SDADATAAI_SAP_ASHOST / _SYSNR / _CLIENT / _USER / _PASSWD
+      # SDADATAAI_SAP_ASHOST / _SYSNR / _SID / _CLIENT / _USER / _PASSWD

@@ -14,6 +14,7 @@ const { Client } = require('open-rfc');
 async function main() {
   const ashost = process.env.SDADATAAI_SAP_ASHOST;
   const sysnr = process.env.SDADATAAI_SAP_SYSNR || '00';
+  const sysid = process.env.SDADATAAI_SAP_SID; // e.g. "BI7" — optional
   const client_ = process.env.SDADATAAI_SAP_CLIENT;
   const user = process.env.SDADATAAI_SAP_USER;
   const passwd = process.env.SDADATAAI_SAP_PASSWD;
@@ -23,8 +24,8 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Connecting to ${ashost} (sysnr ${sysnr}, client ${client_})...`);
-  const client = new Client({ ashost, sysnr, client: client_, user, passwd, lang: 'EN' }, { timeout: 30 });
+  console.log(`Connecting to ${ashost} (sysnr ${sysnr}, sysid ${sysid || '(none)'}, client ${client_})...`);
+  const client = new Client({ ashost, sysnr, sysid, client: client_, user, passwd, lang: 'EN' }, { timeout: 30 });
 
   await client.open();
   console.log('Connection opened.');

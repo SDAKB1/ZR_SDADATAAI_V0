@@ -116,6 +116,7 @@ just return a clear "not configured" error from `call_rfc`/
 ```bash
 cf set-env sdadataai-bw-rfc-mcp SDADATAAI_SAP_ASHOST '<host>'
 cf set-env sdadataai-bw-rfc-mcp SDADATAAI_SAP_SYSNR '00'
+cf set-env sdadataai-bw-rfc-mcp SDADATAAI_SAP_SID '<sysid, e.g. BI7>'
 cf set-env sdadataai-bw-rfc-mcp SDADATAAI_SAP_CLIENT '<client>'
 cf set-env sdadataai-bw-rfc-mcp SDADATAAI_SAP_USER '<user>'
 cf set-env sdadataai-bw-rfc-mcp SDADATAAI_SAP_PASSWD '<password>'

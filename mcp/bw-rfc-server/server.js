@@ -32,6 +32,7 @@ function systemFromEnv(prefix) {
   return {
     ashost,
     sysnr: process.env[`${prefix}_SAP_SYSNR`] || '00',
+    sysid: process.env[`${prefix}_SAP_SID`], // SAP system ID, e.g. "BI7" — optional, open-rfc accepts it alongside ashost
     client: process.env[`${prefix}_SAP_CLIENT`],
     user: process.env[`${prefix}_SAP_USER`],
     passwd: process.env[`${prefix}_SAP_PASSWD`],

@@ -166,6 +166,29 @@ app.use(express.json());
 
 app.get('/health', (req, res) => res.status(200).send('ok')); // unauthenticated, for CF health checks
 
+// --- Plain JSON REST endpoints, for the BW cockpit page in the browser -----
+// Deliberately NOT behind the MCP/Basic-Auth layer below -- a browser page
+// calling an MCP server directly would mean embedding Basic Auth credentials
+// in client-side JS (visible in page source), which is worse than leaving
+// these specific read-only, low-sensitivity endpoints (cube names/metadata,
+// no customer data) open for this short demo. Revisit before any longer-lived
+// or less-trusted deployment.
+
+app.use('/api', (req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  next();
+});
+
+app.get('/api/cubes', async (req, res) => {
+  try {
+    const result = await withRfcConnection('SDADATAAI', (client) => client.call('BAPI_CUBE_GETLIST', {}));
+    const listKey = Object.keys(result).find((k) => Array.isArray(result[k]));
+    res.json({ cubes: listKey ? result[listKey] : [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 app.use('/mcp', requireBasicAuth);
 
 app.post('/mcp', async (req, res) => {

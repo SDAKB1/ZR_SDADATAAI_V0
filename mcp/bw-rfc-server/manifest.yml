@@ -8,11 +8,8 @@ applications:
     instances: 1
     health-check-type: http
     health-check-http-endpoint: /health
-    # No public route: lab-sda_Space's CF route quota is maxed out, and this
-    # server doesn't need one for cf run-task based connection testing. Add
-    # a route deliberately later if the CAP backend needs to reach it over
-    # HTTP from outside this space.
-    no-route: true
+    routes:
+      - route: sdadataai-bw-rfc-mcp.cfapps.us10.hana.ondemand.com
     env:
       MCP_USER_1: AYMANK
       MCP_PASS_1: AYMANK

@@ -4,12 +4,9 @@
  * SDADATAAI BW & S/4HANA RFC bridge, exposed as a remote MCP server.
  *
  * Scope, enforced in code, not just documentation: this server only talks to
- * named "systems" explicitly configured via environment variables. SDADATAAI
- * is the only one wired up today; SDAINTAI is reserved as a named slot for
- * a later session and is rejected with a clear error until its own
- * SDAINTAI_SAP_* env vars are set. There is no way to call an arbitrary
- * SAP host through this server — the caller can only pick among the
- * allowlisted system names below.
+ * the "SDADATAAI" system, with connection params supplied entirely via
+ * environment variables. There is no way to call an arbitrary SAP host
+ * through this server, and no other system name is recognized at all.
  */
 
 const express = require('express');
@@ -19,14 +16,14 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const { z } = require('zod');
 
-// --- Allowlisted systems -----------------------------------------------
-// Each entry's connection params come entirely from env vars. A system that
-// has no ASHOST configured is treated as "not yet set up" and calls to it
-// are rejected, rather than silently falling back to any default.
+// --- Allowlisted system --------------------------------------------------
+// Connection params come entirely from env vars. If ASHOST isn't configured,
+// the system is treated as "not yet set up" and calls to it are rejected,
+// rather than silently falling back to any default.
 
 function systemFromEnv(prefix) {
   const ashost = process.env[`${prefix}_SAP_ASHOST`];
-  if (!ashost) return null; // not configured yet — e.g. SDAINTAI today
+  if (!ashost) return null; // not configured yet
   return {
     ashost,
     sysnr: process.env[`${prefix}_SAP_SYSNR`] || '00',
@@ -37,8 +34,7 @@ function systemFromEnv(prefix) {
 }
 
 const SYSTEMS = {
-  SDADATAAI: systemFromEnv('SDADATAAI'),
-  SDAINTAI: systemFromEnv('SDAINTAI') // reserved for later, null until configured
+  SDADATAAI: systemFromEnv('SDADATAAI')
 };
 
 function getSystemConnectionParams(systemName) {
@@ -50,7 +46,7 @@ function getSystemConnectionParams(systemName) {
   const params = SYSTEMS[systemName];
   if (!params) {
     throw new Error(
-      `System "${systemName}" is a reserved name but has no connection configured yet ` +
+      `System "${systemName}" has no connection configured yet ` +
       `(set ${systemName}_SAP_ASHOST etc. as CF env vars to enable it).`
     );
   }
@@ -62,8 +58,7 @@ function getSystemConnectionParams(systemName) {
 // requested as the default so the server is usable immediately on deploy.
 // NOTE: identical username/password per user is weak by design, per explicit
 // request — rotate these via `cf set-env` + restage before relying on this
-// for anything beyond initial wiring. See MCP on CF SDA.md for the flagged
-// security caveat.
+// for anything beyond initial wiring.
 
 const MCP_USERS = {
   [process.env.MCP_USER_1 || 'AYMANK']: process.env.MCP_PASS_1 || 'AYMANK',
@@ -102,13 +97,10 @@ function buildMcpServer() {
 
   server.tool(
     'call_rfc',
-    'Executes a named RFC/BAPI on an allowlisted SAP system (currently only "SDADATAAI") ' +
-    'and returns the result, including nested structures/tables, directly as tool output.',
+    'Executes a named RFC/BAPI on the SDADATAAI SAP system and returns the ' +
+    'result, including nested structures/tables, directly as tool output.',
     {
-      system: z.enum(['SDADATAAI', 'SDAINTAI']).describe(
-        'Which allowlisted system to call. Only SDADATAAI is configured today; ' +
-        'SDAINTAI is reserved for a later session.'
-      ),
+      system: z.enum(['SDADATAAI']).describe('The only allowlisted system.'),
       rfc_name: z.string().describe('The RFC/BAPI name to execute, e.g. RSA1_ODSO_GET_DETAIL.'),
       import_parameters: z.record(z.any()).optional().default({})
         .describe('Import parameters for the RFC.'),
@@ -138,10 +130,10 @@ function buildMcpServer() {
 
   server.tool(
     'get_rfc_metadata',
-    'Looks up the expected import/changing/table parameters for a named RFC/BAPI on an ' +
-    'allowlisted system, before calling it — use this to avoid guessing a call signature.',
+    'Looks up the expected import/changing/table parameters for a named RFC/BAPI on the ' +
+    'SDADATAAI SAP system, before calling it — use this to avoid guessing a call signature.',
     {
-      system: z.enum(['SDADATAAI', 'SDAINTAI']),
+      system: z.enum(['SDADATAAI']),
       rfc_name: z.string()
     },
     async ({ system, rfc_name }) => {

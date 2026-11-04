@@ -16,4 +16,3 @@ applications:
       # Set these before first push (cf set-env, then cf restage), not committed here:
       # SAP_NPM_REGISTRY_TOKEN          — private npm feed token for @sap-rfc scope
       # SDADATAAI_SAP_ASHOST / _SYSNR / _CLIENT / _USER / _PASSWD
-      # SDAINTAI_SAP_ASHOST / ...      — leave unset until SDAINTAI is ready

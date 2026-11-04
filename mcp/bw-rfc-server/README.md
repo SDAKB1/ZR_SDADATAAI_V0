@@ -7,8 +7,8 @@ the deployed MCP server (or run it locally).
 
 A standalone MCP server that lets Claude (or any MCP client, or
 SDADATAAI's own CAP backend) call SAP RFCs/BAPIs by name on the
-**SDADATAAI** system (SDAINTAI reserved for later, not yet enabled) —
-e.g. BW metadata/extract RFCs needed for the BW migration cockpit.
+**SDADATAAI** system — e.g. BW metadata/extract RFCs needed for the BW
+migration cockpit.
 
 ## Option A — Connect to it as a remote MCP server (Claude Desktop / Claude Code)
 
@@ -107,9 +107,7 @@ cf restage sdadataai-bw-rfc-mcp
 
 ## What this server will NOT do
 
-It only accepts `system: "SDADATAAI"` or `system: "SDAINTAI"` — never an
-arbitrary host. `SDAINTAI` is a reserved name until its own
-`SDAINTAI_SAP_*` env vars are set; calling it before then returns an
-explicit error rather than silently doing nothing or falling back to
-SDADATAAI. There's no way around this allowlist from the client side —
-it's enforced in `server.js`, not just this doc.
+It only accepts `system: "SDADATAAI"` — never an arbitrary host, and no
+other system name is recognized at all. There's no way around this
+allowlist from the client side — it's enforced in `server.js`, not just
+this doc.

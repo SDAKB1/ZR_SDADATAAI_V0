@@ -17,7 +17,7 @@ function getLogger() {
  * @param {string} rfcName - e.g. 'RSA1_ODSO_GET_DETAIL'
  * @param {object} importParameters
  * @param {object} [options]
- * @param {'SDADATAAI'|'SDAINTAI'} [options.system='SDADATAAI'] - allowlisted target system
+ * @param {'SDADATAAI'} [options.system='SDADATAAI'] - the only allowlisted system
  * @param {object} [options.changingParameters]
  * @param {object} [options.tableParameters]
  * @returns {Promise<object>} the RFC result

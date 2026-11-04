@@ -1,0 +1,20 @@
+{
+  "name": "sdadataai-bw-rfc-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server exposing dynamic SAP BW and S/4HANA RFC calls, scoped to SDADATAAI (SDAINTAI reserved for later). Deployed standalone on Cloud Foundry, called by SDADATAAI's CAP backend (and future SDAINTAI) over HTTP with Basic Auth.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": "^20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@sap-rfc/node-rfc-library": "^1.1.2",
+    "express": "^4.19.2",
+    "basic-auth": "^2.0.1",
+    "zod": "^3.23.8"
+  }
+}

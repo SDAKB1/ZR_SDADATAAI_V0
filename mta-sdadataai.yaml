@@ -1,0 +1,24 @@
+_schema-version: 3.3.0
+ID: sdadataai
+version: 0.0.1
+description: "SDA-DATA-AI Platform — Static Web Console (SDADATAAI BW Cockpit) + Brain AI (LangChain/LangGraph)"
+
+parameters:
+  enable-parallel-deployments: true
+
+modules:
+
+  - name: sdadataai
+    type: nodejs
+    path: app/aiconx
+    parameters:
+      buildpack: staticfile_buildpack
+      memory: 64M
+      disk-quota: 256M
+      health-check-type: process
+      no-route: false
+      routes:
+        - route: sdadataai.cfapps.us10.hana.ondemand.com
+    build-parameters:
+      builder: custom
+      commands: []

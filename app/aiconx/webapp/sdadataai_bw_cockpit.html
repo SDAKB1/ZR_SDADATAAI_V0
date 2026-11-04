@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="SDADATAAI Simplified — drag-and-drop BW objects in 3D, explode their hierarchy onto the knowledge graph, drag children onto a Joule Node or KG Node to auto-generate 1:1 skills/prompts, Datasphere tables, BDC governed views and push-down SQL, then migrate, inspect results, test prompts, and push to production.">
+<title>SDADATAAI — Simplified BW → KG Cockpit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+:root{
+  --sda-blue:#0070F2; --sda-blue-dark:#00529c; --gold:#e5a93b; --cyan:#22d3ee; --purple:#a78bfa;
+  --bg:#0b0e14; --panel:#131722; --panel2:#171c28; --border:rgba(255,255,255,0.08);
+  --text:#eef1f7; --text-muted:#8b93a7; --green:#3ddc84; --red:#ff6161;
+  font-family:'Outfit',sans-serif;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--text);min-height:100vh;}
+.mono{font-family:'JetBrains Mono',monospace;}
+
+/* ===== Header ===== */
+header.top{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;}
+.brand{display:flex;flex-direction:column;}
+.brand .tag{font-size:0.68rem;letter-spacing:0.18em;color:var(--cyan);font-weight:700;}
+.brand h1{font-size:1.15rem;margin:2px 0 0;font-weight:800;}
+.brand h1 small{color:var(--text-muted);font-weight:500;font-size:0.7rem;display:block;}
+.persona-toggle{display:flex;gap:6px;background:var(--panel2);border:1px solid var(--border);border-radius:999px;padding:4px;}
+.persona-toggle button{border:none;background:transparent;color:var(--text-muted);padding:7px 16px;border-radius:999px;font-weight:700;font-size:0.76rem;cursor:pointer;transition:0.15s;}
+.persona-toggle button.active{background:var(--sda-blue);color:#fff;}
+
+/* ===== Stepper ===== */
+.stepper{display:flex;gap:2px;padding:10px 28px;background:var(--panel2);border-bottom:1px solid var(--border);overflow-x:auto;}
+.step-pill{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:10px;font-size:0.72rem;font-weight:700;color:var(--text-muted);cursor:pointer;white-space:nowrap;border:1px solid transparent;}
+.step-pill .n{width:20px;height:20px;border-radius:50%;background:var(--panel);display:flex;align-items:center;justify-content:center;font-size:0.64rem;border:1px solid var(--border);flex:none;}
+.step-pill.active{color:#fff;background:rgba(0,112,242,0.16);border-color:var(--sda-blue);}
+.step-pill.active .n{background:var(--sda-blue);border-color:var(--sda-blue);}
+.step-pill.done .n{background:var(--green);border-color:var(--green);color:#06230f;}
+
+/* ===== Queue strip ===== */
+.queue-strip{display:none;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 28px;background:rgba(0,112,242,0.08);border-bottom:1px solid var(--border);}
+.queue-strip.show{display:flex;}
+.queue-strip .lbl{font-size:0.74rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;}
+.queue-chip{background:var(--panel2);border:1px solid var(--border);border-radius:999px;padding:5px 8px 5px 12px;font-size:0.76rem;font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:8px;}
+.queue-chip button{border:none;background:rgba(255,97,97,0.15);color:#ff8a8a;width:18px;height:18px;border-radius:50%;cursor:pointer;font-size:0.6rem;}
+.queue-strip .spacer{flex:1;}
+
+main{padding:28px;max-width:1280px;margin:0 auto;}
+.screen{display:none;animation:fadein 0.25s ease;}
+.screen.active{display:block;}
+@keyframes fadein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:18px;}
+h2.scr-title{margin:0 0 4px;font-size:1.3rem;font-weight:800;}
+p.scr-sub{margin:0 0 20px;color:var(--text-muted);font-size:0.88rem;}
+.btn{border:none;border-radius:10px;padding:11px 20px;font-weight:700;font-size:0.84rem;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:0.15s;}
+.btn-primary{background:var(--sda-blue);color:#fff;}
+.btn-primary:hover{background:var(--sda-blue-dark);}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed;}
+.btn-ghost{background:var(--panel2);color:var(--text);border:1px solid var(--border);}
+.btn-gold{background:var(--gold);color:#241a06;}
+.btn-sm{padding:7px 12px;font-size:0.72rem;border-radius:8px;}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text);}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:0.72rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;}
+.field input,.field select{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:0.86rem;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.foot-row{display:flex;justify-content:center;gap:12px;margin-top:22px;}
+
+/* ===== Step 1 connect ===== */
+.connect-wrap{max-width:460px;}
+
+/* ===== 3D type tabs + swipe deck ===== */
+.type-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:22px;}
+.type-tabs button{background:var(--panel2);border:1px solid var(--border);color:var(--text-muted);padding:8px 14px;border-radius:999px;font-size:0.76rem;font-weight:700;cursor:pointer;}
+.type-tabs button.active{background:var(--cyan);color:#052a30;border-color:var(--cyan);}
+.deck-stage{perspective:1300px;height:300px;display:flex;align-items:center;justify-content:center;position:relative;}
+.deck-track{position:relative;width:100%;height:100%;transform-style:preserve-3d;}
+.obj-card{position:absolute;top:50%;left:50%;width:210px;height:250px;margin:-125px 0 0 -105px;
+  background:linear-gradient(160deg,#182230,#0f1620);border:1px solid var(--border);border-radius:16px;
+  padding:18px;display:flex;flex-direction:column;justify-content:space-between;cursor:grab;
+  transition:transform 0.35s ease,opacity 0.35s ease,box-shadow 0.35s ease;box-shadow:0 20px 40px rgba(0,0,0,0.45);}
+.obj-card:active{cursor:grabbing;}
+.obj-card.dragging{opacity:0.35;}
+.obj-card .badge{align-self:flex-start;background:rgba(34,211,238,0.14);color:var(--cyan);font-size:0.62rem;font-weight:800;padding:3px 9px;border-radius:999px;text-transform:uppercase;}
+.obj-card .badge.custom{background:rgba(229,169,59,0.16);color:var(--gold);}
+.obj-card .nm{font-family:'JetBrains Mono',monospace;font-size:1.02rem;font-weight:700;margin:10px 0 4px;}
+.obj-card .ds{font-size:0.78rem;color:var(--text-muted);line-height:1.35;}
+.obj-card .cx{font-size:0.68rem;font-weight:700;padding:3px 8px;border-radius:6px;align-self:flex-start;}
+.cx.simple{background:rgba(61,220,132,0.15);color:var(--green);}
+.cx.medium{background:rgba(229,169,59,0.15);color:var(--gold);}
+.cx.complex{background:rgba(255,97,97,0.15);color:var(--red);}
+.deck-nav{display:flex;justify-content:center;gap:14px;margin-top:14px;}
+.deck-nav button{width:42px;height:42px;border-radius:50%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-size:1rem;cursor:pointer;}
+.deck-hint{text-align:center;color:var(--text-muted);font-size:0.74rem;margin-top:8px;}
+
+/* ===== KG Canvas (drag & drop) ===== */
+.kg-canvas{display:grid;grid-template-columns:1fr 280px;gap:22px;margin-top:26px;align-items:start;}
+@media (max-width:860px){.kg-canvas{grid-template-columns:1fr;}}
+.explosion-zone{min-height:280px;border:2px dashed var(--border);border-radius:16px;padding:22px;transition:0.2s;background:rgba(255,255,255,0.015);}
+.explosion-zone.drag-over{border-color:var(--cyan);background:rgba(34,211,238,0.07);box-shadow:0 0 0 4px rgba(34,211,238,0.1);}
+.explosion-empty{color:var(--text-muted);text-align:center;padding:64px 10px;font-size:0.86rem;}
+.explosion-empty i{font-size:1.5rem;display:block;margin-bottom:12px;opacity:0.55;}
+.kg-targets{display:flex;flex-direction:column;gap:18px;}
+.kg-target-node{border-radius:16px;padding:18px 16px;text-align:center;border:2px solid var(--border);transition:transform 0.2s,box-shadow 0.2s;}
+.kg-target-node .ic{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.3rem;}
+.kg-target-node .lbl{font-weight:800;font-size:0.86rem;}
+.kg-target-node .hint{font-size:0.68rem;color:var(--text-muted);margin-top:4px;line-height:1.4;}
+.kg-target-node.joule{background:linear-gradient(160deg,rgba(61,220,132,0.1),rgba(167,139,250,0.06));}
+.kg-target-node.joule .ic{background:var(--green);color:#06230f;}
+.kg-target-node.kg{background:linear-gradient(160deg,rgba(34,211,238,0.1),rgba(0,112,242,0.06));}
+.kg-target-node.kg .ic{background:var(--cyan);color:#052a30;}
+.kg-target-node.drag-over{transform:scale(1.045);box-shadow:0 0 0 5px rgba(255,255,255,0.1);}
+.kg-target-node.shake{animation:shake 0.45s ease;}
+@keyframes shake{0%,100%{transform:translateX(0);}20%{transform:translateX(-8px);}40%{transform:translateX(7px);}60%{transform:translateX(-5px);}80%{transform:translateX(4px);}}
+.artifact-list{margin-top:12px;display:flex;flex-direction:column;gap:8px;text-align:left;}
+.artifact-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:0.72rem;animation:popin 0.35s ease;}
+@keyframes popin{0%{opacity:0;transform:scale(0.7) translateY(6px);}60%{opacity:1;transform:scale(1.04);}100%{transform:scale(1);}}
+.artifact-card .nm{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:0.74rem;word-break:break-all;}
+.artifact-card .vec{color:var(--text-muted);font-family:'JetBrains Mono',monospace;font-size:0.6rem;margin-top:4px;}
+.artifact-card .mini-test-btn{margin-top:8px;}
+.artifact-card .mini-result{margin:6px 0 0;color:var(--text-muted);}
+.artifact-card .mini-result b{color:var(--text);}
+
+/* ===== hierarchy explosion (lives inside the KG canvas) ===== */
+.hier-wrap{display:flex;flex-direction:column;align-items:center;gap:0;}
+.hier-root{background:linear-gradient(160deg,var(--sda-blue),var(--sda-blue-dark));border-radius:14px;padding:16px 26px;font-family:'JetBrains Mono',monospace;font-weight:800;font-size:1.05rem;box-shadow:0 10px 30px rgba(0,112,242,0.35);}
+.hier-connector{width:1px;height:26px;background:var(--border);}
+.hier-children{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;padding-top:10px;border-top:1px solid var(--border);margin-top:10px;}
+.hier-child{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;width:220px;text-align:left;transition:0.2s;}
+.hier-child.draggable-ready{box-shadow:0 0 0 2px var(--cyan);cursor:grab;}
+.hier-child.draggable-ready:active{cursor:grabbing;}
+.hier-child.locked{opacity:0.55;}
+.hier-child.pushed-ok{box-shadow:0 0 0 2px var(--green);opacity:0.8;}
+.hier-child .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.hier-child .hd input{width:16px;height:16px;accent-color:var(--cyan);}
+.hier-child .nm{font-family:'JetBrains Mono',monospace;font-size:0.84rem;font-weight:700;}
+.hier-child .role{font-size:0.7rem;color:var(--text-muted);margin:6px 0 0;}
+.query-badge{background:rgba(167,139,250,0.18);color:var(--purple);font-size:0.6rem;font-weight:800;padding:2px 7px;border-radius:999px;text-transform:uppercase;}
+.sub-toggle{font-size:0.68rem;color:var(--purple);cursor:pointer;margin-top:8px;font-weight:700;}
+.sub-list{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);display:none;}
+.sub-list.open{display:block;}
+.sub-row{font-size:0.72rem;padding:3px 0;}
+.sub-row .sub-kind{color:var(--purple);font-weight:700;}
+.drag-cue{font-size:0.68rem;color:var(--cyan);margin:6px 0 0;font-weight:700;}
+
+/* ===== Clean Metadata ===== */
+.meta-card{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:12px;}
+.meta-card .hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.meta-card .nm{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:0.9rem;}
+.meta-card .desc{font-size:0.86rem;line-height:1.4;margin:4px 0 10px;}
+.meta-card .desc.accepted{color:var(--green);}
+.meta-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.challenge-box{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:none;gap:8px;flex-wrap:wrap;}
+.challenge-box.open{display:flex;}
+.status-chip{font-size:0.62rem;font-weight:800;padding:3px 9px;border-radius:999px;text-transform:uppercase;}
+.status-chip.pending{background:rgba(229,169,59,0.16);color:var(--gold);}
+.status-chip.ok{background:rgba(61,220,132,0.15);color:var(--green);}
+
+/* ===== Migrate ===== */
+.sql-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px;}
+.sql-box{background:#0a0d13;border:1px solid var(--border);border-radius:10px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:0.72rem;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow:auto;}
+.sql-box .tag{display:block;font-family:'Outfit',sans-serif;font-size:0.68rem;font-weight:800;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;}
+.progress-bar{height:8px;border-radius:999px;background:var(--panel2);overflow:hidden;margin:16px 0;}
+.progress-bar .fill{height:100%;background:linear-gradient(90deg,var(--sda-blue),var(--cyan));width:0%;transition:width 1.1s ease;}
+.locked-note{display:flex;align-items:center;gap:10px;background:rgba(255,97,97,0.08);border:1px solid rgba(255,97,97,0.3);color:#ffb3b3;padding:12px 16px;border-radius:10px;font-size:0.8rem;}
+.locked-note.gold{background:rgba(229,169,59,0.08);border-color:rgba(229,169,59,0.3);color:#f1cd8a;}
+
+/* ===== Lumi proactive card ===== */
+.lumi-card{margin-top:18px;background:linear-gradient(160deg,rgba(167,139,250,0.14),rgba(0,112,242,0.07));border:1px solid rgba(167,139,250,0.35);border-radius:14px;padding:18px;animation:popin 0.35s ease;}
+.lumi-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.lumi-avatar{width:32px;height:32px;border-radius:50%;background:var(--purple);display:flex;align-items:center;justify-content:center;flex:none;}
+.lumi-meta{font-size:0.7rem;color:var(--text-muted);}
+.lumi-actions{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;}
+
+/* ===== View Migration Results ===== */
+.results-table{width:100%;border-collapse:collapse;font-size:0.8rem;}
+.results-table th{text-align:left;padding:10px 12px;color:var(--text-muted);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);}
+.results-table td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+.results-table code{font-family:'JetBrains Mono',monospace;font-size:0.8rem;}
+.pub-badge{background:rgba(61,220,132,0.15);color:var(--green);font-size:0.68rem;font-weight:800;padding:3px 9px;border-radius:999px;}
+.code-anchor{margin-top:20px;background:#0a0d13;border:1px solid var(--border);border-radius:10px;padding:14px;transition:box-shadow 0.3s ease;}
+.code-anchor.flash{box-shadow:0 0 0 3px var(--gold);}
+.code-anchor h4{margin:0 0 8px;font-size:0.84rem;font-family:'JetBrains Mono',monospace;}
+
+/* ===== Data Lake (perspective-tilt floor, same trick as index.html intro scene) ===== */
+.lake-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:0.76rem;color:var(--text-muted);margin-bottom:14px;}
+.lake-legend .note{color:var(--text-muted);opacity:0.7;}
+.lake-stage{position:relative;height:320px;border-radius:16px;overflow:hidden;background:linear-gradient(180deg,#0e1119 0%,#121624 60%,#161a24 100%);border:1px solid var(--border);perspective:900px;}
+.lake-floor{position:absolute;left:4%;right:4%;bottom:4%;height:80%;transform:rotateX(46deg);transform-origin:bottom;background:repeating-linear-gradient(100deg,rgba(255,255,255,0.03) 0 2px,transparent 2px 46px);border:1px solid rgba(255,255,255,0.05);border-radius:12px;}
+.lake-drop{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#06101c;font-size:0.72rem;box-shadow:0 6px 16px rgba(0,0,0,0.5);cursor:grab;}
+.lake-drop.dragging{opacity:0.35;}
+
+/* ===== Embeddings ===== */
+.embed-section{margin-top:20px;padding-top:20px;border-top:1px solid var(--border);}
+.embed-zone{min-height:120px;border:2px dashed var(--border);border-radius:14px;padding:18px;transition:0.2s;background:rgba(255,255,255,0.015);display:flex;flex-wrap:wrap;gap:12px;align-content:flex-start;}
+.embed-zone.drag-over{border-color:var(--purple);background:rgba(167,139,250,0.08);box-shadow:0 0 0 4px rgba(167,139,250,0.12);}
+.embed-empty{color:var(--text-muted);font-size:0.82rem;text-align:center;width:100%;padding:20px 0;}
+.embed-card{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;width:220px;animation:popin 0.35s ease;}
+.embed-card .nm{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:0.82rem;color:var(--purple);}
+.embed-card .domain{font-size:0.64rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:4px;}
+.embed-card .count{font-size:0.72rem;color:var(--text);margin-top:6px;}
+.embed-card .vec{color:var(--text-muted);font-family:'JetBrains Mono',monospace;font-size:0.6rem;margin-top:4px;}
+
+/* ===== KG Live · Prompts ===== */
+.prompt-row{display:flex;gap:10px;}
+.prompt-row input{flex:1;padding:13px 16px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:0.9rem;}
+.chip-label{font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;font-weight:700;margin:16px 0 8px;}
+.chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+.chip-wrap{display:flex;align-items:center;background:var(--panel2);border:1px solid var(--border);border-radius:999px;overflow:hidden;}
+.chip-wrap button.chip-main{border:none;background:transparent;color:var(--text);padding:8px 12px;font-size:0.76rem;cursor:pointer;}
+.chip-wrap button.chip-main.saved{color:var(--gold);}
+.chip-wrap button.chip-save{border:none;background:rgba(255,255,255,0.05);color:var(--text-muted);width:30px;align-self:stretch;cursor:pointer;}
+.joule-card{margin-top:18px;background:linear-gradient(160deg,rgba(0,112,242,0.12),rgba(34,211,238,0.06));border:1px solid rgba(34,211,238,0.3);border-radius:14px;padding:18px;display:none;}
+.joule-card.show{display:block;}
+.joule-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.joule-avatar{width:32px;height:32px;border-radius:50%;background:var(--sda-blue);display:flex;align-items:center;justify-content:center;}
+.joule-meta{font-size:0.7rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace;}
+
+/* ===== KG Errors ===== */
+.err-row{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;}
+.err-row .ic{color:var(--red);font-size:1rem;}
+.err-row .body{flex:1;}
+.err-row .t{font-weight:700;font-size:0.84rem;display:flex;align-items:center;gap:8px;}
+.err-row .d{font-size:0.74rem;color:var(--text-muted);margin-top:4px;}
+.err-row .count{background:rgba(255,97,97,0.15);color:#ff8a8a;font-size:0.68rem;font-weight:800;padding:3px 9px;border-radius:999px;}
+.sev-badge{font-size:0.6rem;font-weight:800;padding:3px 8px;border-radius:999px;text-transform:uppercase;}
+.sev-badge.high{background:rgba(255,97,97,0.18);color:#ff8a8a;}
+.sev-badge.medium{background:rgba(229,169,59,0.18);color:var(--gold);}
+.conf-tag{font-family:'JetBrains Mono',monospace;font-size:0.64rem;color:var(--text-muted);margin-top:4px;}
+.empty{color:var(--text-muted);font-size:0.84rem;text-align:center;padding:30px 0;}
+
+/* ===== Approve / Production ===== */
+.signoff-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
+.signoff-row .l{font-size:0.86rem;}
+.signoff-row .l b{display:block;font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;font-weight:700;}
+
+.toast-wrap{position:fixed;bottom:22px;right:22px;z-index:200;display:flex;flex-direction:column;gap:8px;}
+.toast{background:var(--panel2);border:1px solid var(--border);border-left:4px solid var(--sda-blue);padding:12px 16px;border-radius:8px;font-size:0.8rem;box-shadow:0 10px 24px rgba(0,0,0,0.4);min-width:260px;animation:fadein 0.2s ease;}
+.toast.green{border-left-color:var(--green);}
+.toast.gold{border-left-color:var(--gold);}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <span class="tag">— SDADATAAI —</span>
+    <h1>Simplified BW → KG Cockpit <small>Drag. Explode. Push to the Knowledge Graph. Migrate. Results. Prompts. Production.</small></h1>
+  </div>
+  <div class="persona-toggle">
+    <button id="persona-approver" onclick="setPersona('approver')">Approver</button>
+    <button id="persona-admin" class="active" onclick="setPersona('admin')">Admin</button>
+  </div>
+</header>
+
+<nav class="stepper" id="stepper"></nav>
+<div class="queue-strip" id="queue-strip"></div>
+
+<main>
+
+  <!-- STEP 1 — CONNECT -->
+  <section class="screen" data-step="1">
+    <div class="panel connect-wrap">
+      <h2 class="scr-title">Connect to BW</h2>
+      <p class="scr-sub">Point at the source BW 7.0 / 7.5 / BW4HANA system. This is a client-side demo — no live RFC/ODATA call is made.</p>
+      <div class="field"><label>System ID</label><input id="bw-sysid" value="BWP" class="mono"></div>
+      <div class="field"><label>Client</label><input id="bw-client" value="100" class="mono"></div>
+      <button class="btn btn-primary" onclick="doConnect()"><i class="fa-solid fa-plug"></i> Connect &amp; Browse Objects</button>
+    </div>
+  </section>
+
+  <!-- STEP 2 — BROWSE & PUSH TO KG (3D deck + drag/drop canvas, merged) -->
+  <section class="screen" data-step="2">
+    <div class="panel">
+      <h2 class="scr-title">Browse &amp; Push to KG</h2>
+      <p class="scr-sub">Swipe through each BW object type, then drag a card down onto the canvas to explode its hierarchy. Check the where-used children you want to migrate, then drag each checked child onto the matching node — a query goes to the Joule Node, everything else goes to the KG Node.</p>
+      <div class="type-tabs" id="type-tabs"></div>
+      <div class="deck-stage"><div class="deck-track" id="deck-track"></div></div>
+      <div class="deck-nav">
+        <button onclick="deckMove(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+        <button onclick="deckMove(1)"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+      <p class="deck-hint">Drag the centered card down onto the canvas below — or click it twice (bring to front, then click again) to explode it.</p>
+
+      <div class="kg-canvas">
+        <div class="explosion-zone" id="explosion-zone" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="dropOnExplode(event)"></div>
+        <div class="kg-targets">
+          <div class="kg-target-node joule" id="node-joule" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="dropOnJoule(event)">
+            <div class="ic"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+            <div class="lbl">Joule Node</div>
+            <div class="hint">Drop a <b>query</b> child here → 1:1 Skill + Prompt, test it on the spot</div>
+            <div class="artifact-list" id="joule-artifacts"></div>
+          </div>
+          <div class="kg-target-node kg" id="node-kg" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="dropOnKg(event)">
+            <div class="ic"><i class="fa-solid fa-diagram-project"></i></div>
+            <div class="lbl">KG Node</div>
+            <div class="hint">Drop any other child here → 1:1 Datasphere flattened table + BDC governed view, plus push-down SQL per ABAP routine</div>
+            <div class="artifact-list" id="kg-artifacts"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot-row">
+        <button class="btn btn-primary" id="btn-canvas-continue" onclick="goStep(3)" disabled><i class="fa-solid fa-arrow-right"></i> Continue to Clean Metadata</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3 — CLEAN METADATA -->
+  <section class="screen" data-step="3">
+    <div class="panel">
+      <h2 class="scr-title">Clean Metadata</h2>
+      <p class="scr-sub">Every queued object gets an AI-proposed business description. Accept it, Auto-Fix for a quick regenerate, or Challenge with Lumi to steer how it's rewritten — same review pattern as the production KGABAPCHAIN flow.</p>
+      <div id="meta-list"></div>
+      <div class="foot-row">
+        <button class="btn btn-primary" id="btn-meta-continue" onclick="goStep(4)"><i class="fa-solid fa-arrow-right"></i> Continue to Migrate</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 4 — MIGRATE (ADMIN GATED) -->
+  <section class="screen" data-step="4">
+    <div class="panel">
+      <h2 class="scr-title">Execute Migration — Datasphere &amp; BDC</h2>
+      <p class="scr-sub">All linked nodes move together, object by object. Every ABAP routine on a selected child is converted to its own push-down SQL — no row-by-row ABAP runtime in the target.</p>
+      <div id="migrate-gate"></div>
+      <div id="migrate-body" style="display:none;">
+        <div class="progress-bar"><div class="fill" id="migrate-fill"></div></div>
+        <p class="scr-sub" id="migrate-status" style="margin:0;"></p>
+        <div id="migrate-lumi"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 5 — VIEW MIGRATION RESULTS -->
+  <section class="screen" data-step="5">
+    <div class="panel">
+      <h2 class="scr-title">View Migration Results</h2>
+      <p class="scr-sub">Every migrated BW object and the Datasphere/BDC data products it actually produced — click View Code to inspect the push-down SQL that replaced its ABAP.</p>
+      <div style="overflow-x:auto;"><table class="results-table"><thead><tr>
+        <th>Source Object</th><th>New Semantic Object</th><th>Targets</th><th>Push-Down</th><th>Reload Strategy</th><th>Analyze</th>
+      </tr></thead><tbody id="results-body"></tbody></table></div>
+      <div id="code-anchors"></div>
+      <div class="foot-row">
+        <button class="btn btn-primary" onclick="goStep(6)"><i class="fa-solid fa-arrow-right"></i> Continue to Data Lake</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 6 — DATA LAKE -->
+  <section class="screen" data-step="6">
+    <div class="panel">
+      <h2 class="scr-title">KG Push · Data Lake</h2>
+      <p class="scr-sub">Every metadata/query/skill/target/ABAP artifact generated while dragging on the KG Canvas lives here as a sized droplet, one unique vector ID per entry. Hand-rolled CSS 3D lake (perspective-tilted floor) — drag any droplet down into Embeddings below, or hover one for its ID.</p>
+      <div class="lake-legend" id="lake-legend"></div>
+      <div class="lake-stage"><div class="lake-floor" id="lake-floor"></div></div>
+
+      <div class="embed-section">
+        <h2 class="scr-title" style="font-size:1.05rem;"><i class="fa-solid fa-brain" style="color:var(--purple);"></i> Embeddings</h2>
+        <p class="scr-sub">Drag a Datasphere data product droplet in and it auto-names a functional-domain embedding (e.g. <code class="mono">KGEMBED_FINANCE01</code>, <code class="mono">KGEMBED_SALES01</code>) that groups every vector coordinate already in the lake for that same domain — not just the one you dropped. Or let Lumi auto-propose one per domain.</p>
+        <div class="embed-zone" id="embed-zone" ondragover="allowDrop(event)" ondragleave="clearDragOver(event)" ondrop="dropOnEmbeddings(event)"></div>
+        <div class="foot-row">
+          <button class="btn btn-outline" onclick="autoProposeEmbeddings()"><i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Propose Embeddings</button>
+        </div>
+      </div>
+
+      <div class="foot-row">
+        <button class="btn btn-primary" onclick="goStep(7)"><i class="fa-solid fa-arrow-right"></i> Continue to KG Live · Prompts</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 7 — KG LIVE · TEST PROMPTS -->
+  <section class="screen" data-step="7">
+    <div class="panel">
+      <h2 class="scr-title">KG Live — Test Prompts</h2>
+      <p class="scr-sub">Prompts below are the real 1:1 Skill + Prompt pairs you generated by dragging query children onto the Joule Node — click to test, or type your own. Each answer shows which vector-store node it resolved against. Bookmark any result to reuse it later.</p>
+      <div class="prompt-row">
+        <input id="prompt-input" placeholder="e.g. show me capex for last month" class="mono">
+        <button class="btn btn-gold" onclick="runPrompt()"><i class="fa-solid fa-wand-magic-sparkles"></i> Test</button>
+      </div>
+      <div id="prompt-chips"></div>
+      <div class="joule-card" id="joule-card"></div>
+      <div class="foot-row">
+        <button class="btn btn-primary" onclick="goStep(8)"><i class="fa-solid fa-arrow-right"></i> Continue to KG Errors</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 8 — KG ERRORS -->
+  <section class="screen" data-step="8">
+    <div class="panel">
+      <h2 class="scr-title">KG Errors — Recurring Issues</h2>
+      <p class="scr-sub">Issues surfaced during the migration run that keep recurring across objects get pushed here instead of staying buried per-object, with a confidence score and severity — inspired by the production KGABAPCHAIN error/exception model.</p>
+      <div class="chip-row" id="kg-errors-filter" style="margin-bottom:14px;"></div>
+      <div id="kg-errors"></div>
+      <div class="foot-row">
+        <button class="btn btn-outline" onclick="scanForNewPatterns()"><i class="fa-solid fa-magnifying-glass"></i> Scan for New Patterns</button>
+        <button class="btn btn-primary" onclick="goStep(9)"><i class="fa-solid fa-arrow-right"></i> Continue to Approve</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 9 — APPROVE -->
+  <section class="screen" data-step="9">
+    <div class="panel">
+      <h2 class="scr-title">Approve</h2>
+      <p class="scr-sub">Segregation of duties: the Admin submits the migrated package for sign-off; only the Approver persona can approve or reject it.</p>
+      <div id="approve-body"></div>
+    </div>
+  </section>
+
+  <!-- STEP 10 — PUSH TO PRODUCTION -->
+  <section class="screen" data-step="10">
+    <div class="panel">
+      <h2 class="scr-title">Push to Production</h2>
+      <p class="scr-sub">The final gated step — only the Admin persona can push, and only once the package has been Approved.</p>
+      <div id="production-body"></div>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+/* ===================== mock data ===================== */
+function hashStr(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>>>0;}return h;}
+function vecId(kind,label,objId){return 'VEC-'+Math.abs(hashStr(kind+'|'+label+'|'+objId)).toString(36).toUpperCase().slice(0,8);}
+
+const BW_TYPES = [
+  {key:'multiprovider', label:'MultiProvider', icon:'fa-layer-group'},
+  {key:'composite', label:'Composite', icon:'fa-shapes'},
+  {key:'cubes', label:'Cubes', icon:'fa-cube'},
+  {key:'opendso', label:'OpenDso', icon:'fa-door-open'},
+  {key:'dso', label:'DSO', icon:'fa-database'},
+  {key:'adso', label:'ADSO', icon:'fa-server'},
+  {key:'hierarchies', label:'Hierarchies', icon:'fa-sitemap'},
+  {key:'masterdata', label:'Attributes / Master Data', icon:'fa-id-card'},
+  {key:'queries', label:'Queries', icon:'fa-magnifying-glass-chart'},
+];
+
+const NAME_ROOTS = ['FIAA','COPA','SD_SALES','MM_PUR','HR_PA','PM_ORD','CRM_OPP','LOGIS','GL','CAPEX'];
+const COMPLEXITY = ['simple','medium','complex'];
+function buildMockObjects(typeKey){
+  const prefix = {multiprovider:'0MP_',composite:'0COMP_',cubes:'0C_',opendso:'ZODS_',dso:'0DS_',adso:'/BIC/A',hierarchies:'0H_',masterdata:'0',queries:'ZQ_'}[typeKey];
+  const out=[];
+  for(let i=0;i<7;i++){
+    const root = NAME_ROOTS[(hashStr(typeKey+i))%NAME_ROOTS.length];
+    const isCustom = i%3===0;
+    const id = (isCustom?'Z':prefix) + root + '_' + String(i+1).padStart(2,'0');
+    out.push({
+      id, name:id,
+      desc: root.replace('_',' ') + ' ' + BW_TYPES.find(t=>t.key===typeKey).label,
+      root, isCustom,
+      complexity: COMPLEXITY[hashStr(id)%3],
+    });
+  }
+  return out;
+}
+const OBJ_CACHE = {};
+BW_TYPES.forEach(t=>OBJ_CACHE[t.key]=buildMockObjects(t.key));
+
+const ROUTINE_LIBRARY = [
+  {key:'START_ROUTINE', label:'Start Routine'},
+  {key:'END_ROUTINE', label:'End Routine'},
+  {key:'EXPERT_ROUTINE', label:'Expert Routine'},
+  {key:'TRANSFORMATION', label:'Transformation Rule'},
+];
+function getRoutines(obj){
+  const h=hashStr(obj.id); const count=1+(h%3);
+  const out=[];
+  for(let i=0;i<count;i++) out.push(ROUTINE_LIBRARY[(h+i)%ROUTINE_LIBRARY.length]);
+  return out;
+}
+function getDdicTables(obj){
+  const h=hashStr(obj.id+'_T');
+  if(h%4===0) return [];
+  return [{table:'/BIC/A'+obj.id.replace(/[^A-Z0-9]/g,'').slice(0,8)+'2', role:'Active data table'}];
+}
+const QUERY_LIBRARY = [
+  {suffix:'Q01', label:'Monthly Management Reporting'},
+  {suffix:'Q02', label:'YTD Variance Analysis'},
+  {suffix:'Q03', label:'Drilldown by Cost Center / Profit Center'},
+  {suffix:'Q04', label:'Plan vs. Actual Comparison'},
+];
+function getQueryFor(obj){
+  const h=hashStr(obj.id+'_Q');
+  return QUERY_LIBRARY[h%QUERY_LIBRARY.length];
+}
+function getChildren(obj){
+  const h=hashStr(obj.id+'_CH');
+  const count=2+(h%3);
+  const out=[];
+  const q=getQueryFor(obj);
+  out.push({id:obj.id+'_QUERY', name:obj.id+'_'+q.suffix, role:q.label+' — query built on '+obj.name, isQuery:true, query:q, routines:[], ddic:[]});
+  for(let i=0;i<count;i++){
+    const cid = obj.id+'_CHILD'+(i+1);
+    out.push({id:cid, name:'0'+['MATERIAL','CUSTOMER','GL_ACCOUNT','COST_CTR','PLANT','VENDOR'][(h+i)%6]+'_'+(i+1), role:'InfoObject feeding '+obj.name, isQuery:false, routines:getRoutines({id:cid}), ddic:getDdicTables({id:cid})});
+  }
+  return out;
+}
+const DESC_TEMPLATES = [
+  o=>`${o.root.replace('_',' ')} data aggregated for cross-area reporting — business-facing semantic object.`,
+  o=>`Business view of ${o.root.replace('_',' ')}, cleaned of technical BW naming for direct consumption by Joule / analytics.`,
+  o=>`Canonical ${o.root.replace('_',' ')} record set — source of truth once migrated, replaces the raw BW technical name.`,
+];
+function proposeDescription(obj,variant){
+  const h=hashStr(obj.id+'_D'+(variant||0));
+  return DESC_TEMPLATES[h%DESC_TEMPLATES.length](obj);
+}
+const SNIPPET_PAIRS = [
+  { abap:`START-OF-SELECTION.
+  LOOP AT source_package ASSIGNING <fs>.
+    IF <fs>-plant IS NOT INITIAL.
+      <fs>-amount = <fs>-amount * get_fx_rate( <fs>-curr ).
+    ENDIF.
+  ENDLOOP.`,
+    sql:`SELECT plant,
+       amount * fx.rate AS amount_conv
+FROM   source_package AS sp
+JOIN   fx_rate        AS fx
+  ON   fx.curr = sp.curr
+WHERE  sp.plant IS NOT NULL;`, summary:'Currency conversion routine → push-down SQL join' },
+  { abap:`FORM expert_routine.
+  LOOP AT RESULT_PACKAGE ASSIGNING <res>.
+    <res>-cost_ctr = cl_util=>derive_cost_center( <res>-plant, <res>-matl ).
+  ENDLOOP.
+ENDFORM.`,
+    sql:`SELECT p.plant, p.matl,
+       d.cost_ctr
+FROM   result_package AS p
+LEFT JOIN cost_center_derivation AS d
+  ON   d.plant = p.plant AND d.matl = p.matl;`, summary:'Expert routine derivation → push-down SQL lookup' },
+  { abap:`START-OF-SELECTION.
+  DATA(lt_filtered) = FILTER #( source_package WHERE qty > 0 ).
+  MODIFY RESULT_PACKAGE FROM TABLE lt_filtered.`,
+    sql:`SELECT *
+FROM   source_package
+WHERE  qty > 0;`, summary:'Start routine filter → push-down WHERE clause' },
+];
+function routineSnippetFor(id){ return SNIPPET_PAIRS[hashStr(id+'_RS')%SNIPPET_PAIRS.length]; }
+
+/* ===================== global state ===================== */
+let bwPersona='admin';
+let activeType='cubes';
+let deckIndex=0;
+let selectedObj=null;
+let selectedChildren=new Set();
+
+let kgQueue=[];       // {key,obj,type,childIds:[],desc,descVariant,descAccepted,jouleArtifacts:[],kgArtifacts:[],pushdownSql:[],pushed,reload,migrated}
+let vectorStore=[];   // {vecId,kind,label,size,objId}
+let kgErrors=[];
+let kgErrorFilter='all';
+let approvalStatus='Not Submitted'; // Not Submitted | Pending Approval | Approved | Rejected
+let productionLive=false;
+let qSeq=1;
+
+/* ===================== stepper ===================== */
+const STEPS=[
+  {n:1,label:'Connect'},
+  {n:2,label:'Browse & Push to KG'},
+  {n:3,label:'Clean Metadata'},
+  {n:4,label:'Migrate'},
+  {n:5,label:'View Results'},
+  {n:6,label:'KG Push · Data Lake'},
+  {n:7,label:'KG Live · Prompts'},
+  {n:8,label:'KG Errors'},
+  {n:9,label:'Approve'},
+  {n:10,label:'Production'},
+];
+let maxStepReached=1;
+function renderStepper(){
+  document.getElementById('stepper').innerHTML = STEPS.map(s=>`
+    <div class="step-pill ${s.n===currentStep?'active':''} ${s.n<maxStepReached?'done':''}" onclick="${s.n<=maxStepReached?`goStep(${s.n})`:''}">
+      <span class="n">${s.n<maxStepReached?'<i class=\"fa-solid fa-check\" style=\"font-size:9px;\"></i>':s.n}</span>${s.label}
+    </div>`).join('');
+}
+let currentStep=1;
+function goStep(n){
+  currentStep=n; maxStepReached=Math.max(maxStepReached,n);
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active', +s.dataset.step===n));
+  renderStepper();
+  renderQueueStrip();
+  if(n===2){ renderDeck(); renderExplodeCanvas(); }
+  if(n===3) renderMetaList();
+  if(n===4) renderMigrateGate();
+  if(n===5) renderResults();
+  if(n===6){ renderLake(); renderEmbeddings(); }
+  if(n===7) renderPromptChips();
+  if(n===8) renderKgErrors();
+  if(n===9) renderApprove();
+  if(n===10) renderProduction();
+}
+
+function setPersona(p){
+  bwPersona=p;
+  document.getElementById('persona-admin').classList.toggle('active',p==='admin');
+  document.getElementById('persona-approver').classList.toggle('active',p==='approver');
+  if(currentStep===4) renderMigrateGate();
+  if(currentStep===9) renderApprove();
+  if(currentStep===10) renderProduction();
+}
+
+function toast(msg,cls){
+  const wrap=document.getElementById('toast-wrap');
+  const el=document.createElement('div'); el.className='toast '+(cls||''); el.textContent=msg;
+  wrap.appendChild(el); setTimeout(()=>el.remove(),4200);
+}
+
+/* ===================== queue strip (visible on Browse & Push / Clean Metadata) ===================== */
+function renderQueueStrip(){
+  const el=document.getElementById('queue-strip');
+  const showOn=[2,3];
+  if(!showOn.includes(currentStep) || !kgQueue.length){ el.classList.remove('show'); el.innerHTML=''; return; }
+  el.classList.add('show');
+  el.innerHTML = `<span class="lbl">Migration Queue (${kgQueue.length})</span>` +
+    kgQueue.map(q=>`<span class="queue-chip">${q.obj.name}<button onclick="removeFromQueue('${q.key}')" title="Remove"><i class="fa-solid fa-xmark"></i></button></span>`).join('') +
+    `<span class="spacer"></span>` +
+    (currentStep!==3 ? `<button class="btn btn-primary btn-sm" onclick="goStep(3)"><i class="fa-solid fa-arrow-right"></i> Continue to Clean Metadata</button>` : '');
+}
+function removeFromQueue(key){
+  kgQueue=kgQueue.filter(q=>q.key!==key);
+  toast('Removed from queue.','gold');
+  renderQueueStrip();
+  if(currentStep===2) renderExplodeCanvas();
+  if(currentStep===3) renderMetaList();
+}
+
+/* ===================== step 1 ===================== */
+function doConnect(){
+  toast('Connected to '+(document.getElementById('bw-sysid').value||'BWP')+' — objects loaded.','green');
+  goStep(2);
+}
+
+/* ===================== step 2 — 3D deck + KG canvas ===================== */
+function renderTypeTabs(){
+  document.getElementById('type-tabs').innerHTML = BW_TYPES.map(t=>`
+    <button class="${t.key===activeType?'active':''}" onclick="switchType('${t.key}')"><i class="fa-solid ${t.icon}"></i> ${t.label}</button>`).join('');
+}
+function switchType(key){ activeType=key; deckIndex=0; renderTypeTabs(); renderDeck(); }
+function renderDeck(){
+  renderTypeTabs();
+  const list=OBJ_CACHE[activeType];
+  const track=document.getElementById('deck-track');
+  track.innerHTML = list.map((o,i)=>{
+    const offset = i-deckIndex;
+    const abs=Math.abs(offset);
+    if(abs>3) return '';
+    const rotate = offset*-26;
+    const tx = offset*150;
+    const tz = -abs*120;
+    const opacity = abs>2?0:1-abs*0.28;
+    const scale = 1-abs*0.12;
+    return `<div class="obj-card" draggable="true" ondragstart="dragCard(event,${i})" ondragend="this.classList.remove('dragging')" style="transform:translate(${tx}px,0) translateZ(${tz}px) rotateY(${rotate}deg) scale(${scale});opacity:${opacity};z-index:${10-abs};"
+                 onclick="deckCardClick(${i})">
+        <span class="badge ${o.isCustom?'custom':''}">${o.isCustom?'Z Custom':'SAP Standard'}</span>
+        <div>
+          <div class="nm">${o.name}</div>
+          <div class="ds">${o.desc}</div>
+        </div>
+        <span class="cx ${o.complexity}">${o.complexity}</span>
+      </div>`;
+  }).join('');
+}
+function dragCard(ev,i){
+  ev.target.classList.add('dragging');
+  ev.dataTransfer.setData('text/plain', JSON.stringify({type:activeType, index:i}));
+}
+function deckMove(dir){
+  const list=OBJ_CACHE[activeType];
+  deckIndex=(deckIndex+dir+list.length)%list.length;
+  renderDeck();
+}
+function deckCardClick(i){
+  if(i===deckIndex){ openHierarchyFor(OBJ_CACHE[activeType][i]); return; }
+  deckIndex=i; renderDeck();
+}
+function openHierarchyFor(obj){
+  selectedObj=obj; selectedChildren=new Set();
+  toast('Exploded hierarchy for '+obj.name+' — check what you want, then drag it onto a KG node.','');
+  renderExplodeCanvas();
+}
+
+/* ===================== KG canvas — explosion + drag/drop push ===================== */
+function allowDrop(ev){ ev.preventDefault(); ev.currentTarget.classList.add('drag-over'); }
+function clearDragOver(ev){ ev.currentTarget.classList.remove('drag-over'); }
+function readDrop(ev){ try{ return JSON.parse(ev.dataTransfer.getData('text/plain')||'{}'); }catch(e){ return {}; } }
+
+function dropOnExplode(ev){
+  ev.preventDefault();
+  ev.currentTarget.classList.remove('drag-over');
+  const data=readDrop(ev);
+  if(data.type!==undefined && OBJ_CACHE[data.type] && OBJ_CACHE[data.type][data.index]!==undefined){
+    openHierarchyFor(OBJ_CACHE[data.type][data.index]);
+  }
+}
+function dragChild(ev,childId){ ev.dataTransfer.setData('text/plain', JSON.stringify({childId})); }
+
+function ensureQueueEntry(){
+  if(!selectedObj) return null;
+  let q = kgQueue.find(x=>x.obj.id===selectedObj.id && !x.migrated);
+  if(!q){
+    q = { key:selectedObj.id+'_Q'+(qSeq++), obj:selectedObj, type:activeType, childIds:[],
+          desc:null, descVariant:0, descAccepted:false,
+          jouleArtifacts:[], kgArtifacts:[], pushdownSql:[], pushed:false, reload:null, migrated:false };
+    kgQueue.push(q);
+  }
+  q.childIds=[...selectedChildren];
+  return q;
+}
+function allChildrenPushed(q){
+  if(!q) return false;
+  const children=getChildren(q.obj);
+  return q.childIds.length>0 && q.childIds.every(id=>{
+    const child=children.find(c=>c.id===id);
+    if(!child) return true;
+    return child.isQuery ? q.jouleArtifacts.some(a=>a.childId===id) : q.kgArtifacts.some(a=>a.childId===id);
+  });
+}
+function dropOnJoule(ev){
+  ev.preventDefault();
+  const node=document.getElementById('node-joule'); node.classList.remove('drag-over');
+  const data=readDrop(ev);
+  handleChildDrop(data.childId,'joule',node);
+}
+function dropOnKg(ev){
+  ev.preventDefault();
+  const node=document.getElementById('node-kg'); node.classList.remove('drag-over');
+  const data=readDrop(ev);
+  handleChildDrop(data.childId,'kg',node);
+}
+function handleChildDrop(childId,target,nodeEl){
+  if(!selectedObj || !childId) return;
+  const child=getChildren(selectedObj).find(c=>c.id===childId);
+  if(!child){ return; }
+  if(!selectedChildren.has(childId)){ toast('Check the box first, then drag it onto a node.','gold'); return; }
+  const wantsJoule=child.isQuery;
+  if((target==='joule')!==wantsJoule){
+    nodeEl.classList.add('shake'); setTimeout(()=>nodeEl.classList.remove('shake'),450);
+    toast(wantsJoule ? 'Query children go to the Joule Node, not the KG Node.' : 'Only query children go to the Joule Node — drop this on the KG Node instead.','gold');
+    return;
+  }
+  const q=ensureQueueEntry();
+  if(target==='joule'){
+    if(q.jouleArtifacts.some(a=>a.childId===childId)){ toast('Already pushed.','gold'); return; }
+    const skill='SKILL_'+selectedObj.name+'_'+child.query.suffix;
+    const prompt='Show me '+child.query.label.toLowerCase()+' for '+selectedObj.name+'_SEM';
+    const vec=vecId('skill',skill,selectedObj.id);
+    q.jouleArtifacts.push({childId,skill,prompt,vec});
+    dropToLake('query', child.query.label+' ('+selectedObj.name+')', selectedObj.id);
+    dropToLake('skill', skill, selectedObj.id);
+    toast('Joule Skill + Prompt created 1:1 from '+child.name,'green');
+  } else {
+    if(q.kgArtifacts.some(a=>a.childId===childId)){ toast('Already pushed.','gold'); return; }
+    const base=child.name.replace(/^0/,'');
+    const dsTable=selectedObj.name+'_'+base+'_FLAT';
+    const bdcView='GV_'+selectedObj.name+'_'+base;
+    const vec=vecId('target',dsTable,selectedObj.id);
+    q.kgArtifacts.push({childId,dsTable,bdcView,vec});
+    dropToLake('target', dsTable+' / '+bdcView, selectedObj.id);
+    let sqlCount=0;
+    child.routines.forEach(r=>{
+      const snip=routineSnippetFor(childId+'_'+r.key);
+      const rvec=vecId('abap',childId+r.key,selectedObj.id);
+      q.pushdownSql.push({childId,routineKey:r.key,routineLabel:r.label,abap:snip.abap,sql:snip.sql,vec:rvec});
+      dropToLake('abap', r.label+' on '+child.name, selectedObj.id);
+      sqlCount++;
+    });
+    if(child.ddic.length) q.reload={label:'Delta',hint:'Change-log table detected — incremental reload proposed'};
+    else if(!q.reload) q.reload={label:'Full',hint:'No change-log/delta table — full load stays full load'};
+    toast('Datasphere table + BDC view generated 1:1 from '+child.name+(sqlCount?' · '+sqlCount+' push-down SQL generated':''),'green');
+  }
+  q.pushed=true;
+  renderExplodeCanvas();
+}
+function miniTestJoule(vec,promptText){
+  const h=hashStr(promptText+vec);
+  const amount=(1+(h%48)/10).toFixed(1);
+  const ccode=['1000','2000','2200','3100','1500'][h%5];
+  const el=document.getElementById('mini-'+vec);
+  if(el) el.innerHTML = `<p class="mini-result">→ <b>$${amount}M USD</b> · company code <b>${ccode}</b></p>`;
+}
+function renderExplodeCanvas(){
+  const zone=document.getElementById('explosion-zone');
+  const jouleList=document.getElementById('joule-artifacts');
+  const kgList=document.getElementById('kg-artifacts');
+  const contBtn=document.getElementById('btn-canvas-continue');
+  if(!zone) return;
+  if(!selectedObj){
+    zone.innerHTML='<p class="explosion-empty"><i class="fa-solid fa-hand-pointer"></i>Drag a card here from the deck above (or click the centered one) to explode its hierarchy.</p>';
+    jouleList.innerHTML=''; kgList.innerHTML='';
+    contBtn.disabled = !(kgQueue.length>0 && kgQueue.every(x=>allChildrenPushed(x)));
+    return;
+  }
+  const children=getChildren(selectedObj);
+  const q=kgQueue.find(x=>x.obj.id===selectedObj.id && !x.migrated);
+  zone.innerHTML = `
+    <div class="hier-wrap">
+    <div class="hier-root">${selectedObj.name}</div>
+    <div class="hier-connector"></div>
+    <div class="hier-children">
+      ${children.map(c=>{
+        const checked=selectedChildren.has(c.id);
+        const pushed = q && (c.isQuery ? q.jouleArtifacts.some(a=>a.childId===c.id) : q.kgArtifacts.some(a=>a.childId===c.id));
+        const cls = pushed?'pushed-ok':(checked?'draggable-ready':'locked');
+        const draggableAttr = (checked && !pushed) ? `draggable="true" ondragstart="dragChild(event,'${c.id}')"` : '';
+        return `
+        <div class="hier-child ${cls}" ${draggableAttr}>
+          <div class="hd"><input type="checkbox" ${checked?'checked':''} onchange="toggleChild('${c.id}',this.checked)"> <span class="nm">${c.name}</span>${c.isQuery?'<span class="query-badge">Query</span>':''}</div>
+          <p class="role">${c.role}</p>
+          ${pushed ? `<span class="status-chip ok">Pushed ✓</span>` : (checked ? `<p class="drag-cue"><i class="fa-solid fa-arrows-up-down-left-right"></i> Drag onto the ${c.isQuery?'Joule':'KG'} Node →</p>` : '')}
+          ${(!c.isQuery && (c.routines.length||c.ddic.length)) ? `
+            <div class="sub-toggle" onclick="this.nextElementSibling.classList.toggle('open')"><i class="fa-solid fa-code-branch"></i> ABAP / DDIC (${c.routines.length+c.ddic.length})</div>
+            <div class="sub-list">
+              ${c.routines.map(r=>`<div class="sub-row"><span class="sub-kind">${r.label}</span></div>`).join('')}
+              ${c.ddic.map(d=>`<div class="sub-row"><span class="sub-kind">DDIC</span> ${d.table} — ${d.role}</div>`).join('')}
+            </div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>
+    </div>`;
+  jouleList.innerHTML = (q && q.jouleArtifacts.length) ? q.jouleArtifacts.map(a=>`
+    <div class="artifact-card">
+      <div class="nm">${a.skill}</div>
+      <div style="margin:4px 0;">${a.prompt}</div>
+      <div class="vec">${a.vec}</div>
+      <button class="btn btn-outline btn-sm mini-test-btn" onclick="miniTestJoule('${a.vec}','${a.prompt.replace(/'/g,"\\'")}')"><i class="fa-solid fa-bolt"></i> Test Now</button>
+      <div id="mini-${a.vec}"></div>
+    </div>`).join('') : '';
+  kgList.innerHTML = (q && q.kgArtifacts.length) ? q.kgArtifacts.map(a=>`
+    <div class="artifact-card">
+      <div class="nm">${a.dsTable}</div>
+      <div class="nm" style="margin-top:4px;">${a.bdcView}</div>
+      <div class="vec">${a.vec}</div>
+    </div>`).join('') : '';
+  const ready = kgQueue.length>0 && kgQueue.every(x=>allChildrenPushed(x));
+  contBtn.disabled = !ready;
+}
+function toggleChild(id,checked){ checked?selectedChildren.add(id):selectedChildren.delete(id); renderExplodeCanvas(); }
+
+/* ===================== step 3 — clean metadata ===================== */
+function renderMetaList(){
+  const el=document.getElementById('meta-list');
+  if(!kgQueue.length){ el.innerHTML='<p class="empty">Queue is empty — go back to Browse &amp; Push to KG and drag at least one child onto a node.</p>'; updateMetaContinue(); return; }
+  el.innerHTML = kgQueue.map(q=>{
+    if(q.desc===null) q.desc=proposeDescription(q.obj,q.descVariant);
+    return `
+    <div class="meta-card">
+      <div class="hd"><span class="nm">${q.obj.name}</span><span class="status-chip ${q.descAccepted?'ok':'pending'}">${q.descAccepted?'Accepted':'Pending Review'}</span></div>
+      <p class="desc ${q.descAccepted?'accepted':''}" id="desc-${q.key}">${q.desc}</p>
+      <div class="meta-actions">
+        <button class="btn btn-primary btn-sm" onclick="acceptMeta('${q.key}')"><i class="fa-solid fa-check"></i> Accept</button>
+        <button class="btn btn-outline btn-sm" onclick="autoFixMeta('${q.key}')"><i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Fix</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleChallenge('${q.key}')"><i class="fa-solid fa-comments"></i> Challenge with Lumi</button>
+      </div>
+      <div class="challenge-box" id="challenge-${q.key}">
+        <button class="btn btn-ghost btn-sm" onclick="reviseMeta('${q.key}','specific')">Too vague — be more specific</button>
+        <button class="btn btn-ghost btn-sm" onclick="reviseMeta('${q.key}','reguess')">Wrong business area — guess again</button>
+        <button class="btn btn-ghost btn-sm" onclick="revertMeta('${q.key}')">Revert to technical name</button>
+      </div>
+    </div>`;
+  }).join('');
+  updateMetaContinue();
+}
+function findQ(key){ return kgQueue.find(q=>q.key===key); }
+function acceptMeta(key){ const q=findQ(key); if(!q) return; q.descAccepted=true; dropToLake('metadata', q.desc, q.obj.id); toast('Accepted description for '+q.obj.name,'green'); renderMetaList(); }
+function autoFixMeta(key){ const q=findQ(key); if(!q) return; q.descVariant=(q.descVariant+1)%3; q.desc=proposeDescription(q.obj,q.descVariant); q.descAccepted=true; dropToLake('metadata', q.desc, q.obj.id); toast('Auto-fixed and accepted: "'+q.desc+'"','green'); renderMetaList(); }
+function toggleChallenge(key){ document.getElementById('challenge-'+key).classList.toggle('open'); }
+function reviseMeta(key,mode){ const q=findQ(key); if(!q) return; q.descVariant=mode==='specific'?(q.descVariant+1)%3:(q.descVariant+2)%3; q.desc=proposeDescription(q.obj,q.descVariant); q.descAccepted=false; document.getElementById('challenge-'+key).classList.remove('open'); toast('Revised — review the new description for '+q.obj.name,'gold'); renderMetaList(); }
+function revertMeta(key){ const q=findQ(key); if(!q) return; q.desc=q.obj.name+' (unchanged technical name)'; q.descAccepted=false; document.getElementById('challenge-'+key).classList.remove('open'); renderMetaList(); }
+function updateMetaContinue(){
+  const btn=document.getElementById('btn-meta-continue');
+  const ready = kgQueue.length>0 && kgQueue.every(q=>q.descAccepted);
+  btn.disabled=!ready;
+  btn.title = ready?'':'Accept every description before continuing';
+}
+
+/* ===================== step 4 — admin migrate ===================== */
+function migrateLumiCardHtml(count){
+  return `<div class="lumi-card">
+    <div class="lumi-head"><div class="lumi-avatar"><i class="fa-solid fa-sparkles" style="color:#fff;font-size:0.8rem;"></i></div>
+      <div><div style="font-weight:800;font-size:0.84rem;">Lumi</div><div class="lumi-meta">proactive suggestion</div></div></div>
+    <p style="margin:0;font-size:0.88rem;line-height:1.5;">Migration complete — <b>${count}</b> object${count===1?'':'s'} now live as Datasphere &amp; BDC data products. Want me to take you to the results, or go straight to proposing embeddings for them?</p>
+    <div class="lumi-actions">
+      <button class="btn btn-primary btn-sm" onclick="goStep(5)"><i class="fa-solid fa-arrow-right"></i> View Results</button>
+      <button class="btn btn-outline btn-sm" onclick="goStep(6); setTimeout(autoProposeEmbeddings,300);"><i class="fa-solid fa-wand-magic-sparkles"></i> Propose Embeddings</button>
+    </div>
+  </div>`;
+}
+function renderMigrateGate(){
+  const gate=document.getElementById('migrate-gate');
+  const body=document.getElementById('migrate-body');
+  const pushedCount = kgQueue.filter(q=>q.pushed).length;
+  const migratedCount = kgQueue.filter(q=>q.migrated).length;
+  if(bwPersona!=='admin'){
+    gate.innerHTML = `<div class="locked-note"><i class="fa-solid fa-lock"></i> Only the Admin persona can execute migration to Datasphere &amp; BDC. Switch persona in the header to continue.</div>`;
+    body.style.display='none';
+    return;
+  }
+  if(migratedCount){
+    gate.innerHTML = `<div class="locked-note" style="background:rgba(61,220,132,0.08);border-color:rgba(61,220,132,0.3);color:#bdf5d4;"><i class="fa-solid fa-circle-check"></i> Migration already complete — ${migratedCount} object${migratedCount===1?'':'s'} live.</div>` + migrateLumiCardHtml(migratedCount);
+    body.style.display='none';
+    return;
+  }
+  if(!pushedCount){
+    gate.innerHTML = `<div class="locked-note gold"><i class="fa-solid fa-triangle-exclamation"></i> Nothing has been pushed to KGABAPCHAIN yet — go back to Browse &amp; Push to KG first.</div>`;
+    body.style.display='none';
+    return;
+  }
+  gate.innerHTML = `<button class="btn btn-primary" onclick="runMigration()"><i class="fa-solid fa-rocket"></i> Execute Migration — ${pushedCount} Object${pushedCount===1?'':'s'}</button>`;
+  body.style.display='none';
+}
+function runMigration(){
+  document.getElementById('migrate-body').style.display='block';
+  document.getElementById('migrate-status').textContent='Converting ABAP to push-down SQL and replicating to Datasphere & BDC…';
+  setTimeout(()=>{ document.getElementById('migrate-fill').style.width='100%'; },50);
+  setTimeout(()=>{
+    kgQueue.forEach(q=>{ if(q.pushed) q.migrated=true; });
+    const migratedCount=kgQueue.filter(q=>q.migrated).length;
+    document.getElementById('migrate-status').textContent='Migration complete — '+migratedCount+' object(s) now live as Datasphere/BDC data products.';
+    document.getElementById('migrate-lumi').innerHTML = migrateLumiCardHtml(migratedCount);
+    toast('Migration complete — all KG nodes linked, ABAP converted to push-down SQL.','green');
+    seedKgErrors();
+  },1300);
+}
+
+/* ===================== step 5 — view migration results ===================== */
+function renderResults(){
+  const body=document.getElementById('results-body');
+  const anchors=document.getElementById('code-anchors');
+  anchors.innerHTML='';
+  const migrated = kgQueue.filter(q=>q.migrated);
+  if(!migrated.length){ body.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">Nothing migrated yet — run Execute Migration first.</td></tr>'; return; }
+  body.innerHTML = migrated.map(q=>`
+    <tr>
+      <td><code>${q.obj.name}</code></td>
+      <td><code>${q.obj.name}_SEM</code></td>
+      <td>${q.kgArtifacts.length?'<span class="pub-badge">Datasphere</span> <span class="pub-badge">BDC</span>':'<span class="status-chip pending">No target artifacts</span>'}</td>
+      <td>${q.pushdownSql.length} push-down ${q.pushdownSql.length===1?'SQL':'SQLs'}</td>
+      <td title="${q.reload?q.reload.hint:''}">${q.reload?q.reload.label:'—'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="viewCodeFor('${q.key}')"><i class="fa-solid fa-code"></i> View Code</button></td>
+    </tr>`).join('');
+  anchors.innerHTML = migrated.map(q=>`
+    <div class="code-anchor" id="code-${q.key}">
+      <h4>${q.obj.name}_SEM — generated artifacts</h4>
+      ${q.kgArtifacts.length ? `<div class="sql-compare">
+        ${q.kgArtifacts.map(a=>`<div class="sql-box"><span class="tag">Datasphere — flattened local table</span>${escapeHtml('CREATE LOCAL TABLE '+a.dsTable+' AS\nSELECT * FROM '+q.obj.name+'_SEM;')}</div>
+        <div class="sql-box"><span class="tag">BDC — governed view</span>${escapeHtml('CREATE VIEW '+a.bdcView+'\nWITH GOVERNANCE AS\nSELECT * FROM '+a.dsTable+';')}</div>`).join('')}
+      </div>` : ''}
+      ${q.pushdownSql.length ? q.pushdownSql.map(p=>`<div class="sql-compare">
+        <div class="sql-box"><span class="tag">ABAP — ${escapeHtml(p.routineLabel)}</span>${escapeHtml(p.abap)}</div>
+        <div class="sql-box"><span class="tag">Push-down SQL — target</span>${escapeHtml(p.sql)}</div>
+      </div>`).join('') : `<p class="scr-sub" style="margin:0;">No ABAP routines were pushed for this object.</p>`}
+    </div>`).join('');
+}
+function escapeHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function viewCodeFor(key){
+  const el=document.getElementById('code-'+key);
+  el?.scrollIntoView({behavior:'smooth',block:'start'});
+  el?.classList.add('flash');
+  setTimeout(()=>el?.classList.remove('flash'),1500);
+}
+
+/* ===================== step 6 — data lake ===================== */
+const LAKE_KIND_META = {
+  metadata: {color:'#e5a93b', icon:'fa-wand-magic-sparkles'},
+  query:    {color:'#22d3ee', icon:'fa-magnifying-glass-chart'},
+  abap:     {color:'#a78bfa', icon:'fa-code-branch'},
+  skill:    {color:'#3ddc84', icon:'fa-robot'},
+  target:   {color:'#0070F2', icon:'fa-database'},
+};
+function dropToLake(kind,label,objId){
+  const vec=vecId(kind,label,objId);
+  if(vectorStore.some(v=>v.vecId===vec)) return;
+  const size=Math.max(30,Math.min(78,26+label.length*1.4));
+  vectorStore.push({vecId:vec,kind,label,size,objId});
+}
+function renderLake(){
+  const legend=document.getElementById('lake-legend');
+  const floor=document.getElementById('lake-floor');
+  if(!vectorStore.length){
+    legend.innerHTML='';
+    floor.innerHTML='<p class="empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">Nothing in the lake yet — drag children onto a KG node on the Browse &amp; Push to KG canvas first.</p>';
+    return;
+  }
+  const counts={metadata:0,query:0,abap:0,skill:0,target:0};
+  vectorStore.forEach(v=>counts[v.kind]++);
+  legend.innerHTML = `
+    <span><i class="fa-solid fa-circle" style="color:${LAKE_KIND_META.metadata.color};"></i> Metadata (${counts.metadata})</span>
+    <span><i class="fa-solid fa-circle" style="color:${LAKE_KIND_META.query.color};"></i> Queries (${counts.query})</span>
+    <span><i class="fa-solid fa-circle" style="color:${LAKE_KIND_META.abap.color};"></i> ABAP / Push-down (${counts.abap})</span>
+    <span><i class="fa-solid fa-circle" style="color:${LAKE_KIND_META.skill.color};"></i> Joule Skills (${counts.skill})</span>
+    <span><i class="fa-solid fa-circle" style="color:${LAKE_KIND_META.target.color};"></i> Datasphere/BDC Targets (${counts.target})</span>
+    <span class="note">Node size = content weight · hover for its unique vector ID</span>`;
+  floor.innerHTML = vectorStore.map(v=>{
+    const h=Math.abs(hashStr(v.vecId));
+    const left=6+(h%82); const top=8+((h>>4)%68);
+    const meta=LAKE_KIND_META[v.kind];
+    return `<div class="lake-drop" draggable="true" ondragstart="dragDroplet(event,'${v.vecId}')" ondragend="this.classList.remove('dragging')" style="left:${left}%;top:${top}%;width:${v.size}px;height:${v.size}px;background:${meta.color};"
+                 title="${v.vecId} — ${v.kind} — ${v.label} — drag into Embeddings below"><i class="fa-solid ${meta.icon}"></i></div>`;
+  }).join('');
+}
+
+/* ===================== Embeddings ===================== */
+const DOMAIN_MAP = {
+  FIAA:'FINANCE', COPA:'FINANCE', GL:'FINANCE', CAPEX:'FINANCE',
+  SD_SALES:'SALES', CRM_OPP:'SALES',
+  MM_PUR:'PURCHASING',
+  HR_PA:'HR',
+  PM_ORD:'MAINTENANCE',
+  LOGIS:'LOGISTICS',
+};
+function domainForObjId(objId){
+  const root = NAME_ROOTS.find(r=>objId.includes(r));
+  return DOMAIN_MAP[root] || 'GENERAL';
+}
+let embeddings=[]; // {id,domain,vecIds:[],vec,createdAt}
+function nextEmbeddingName(domain){
+  const n = embeddings.filter(e=>e.domain===domain).length+1;
+  return 'KGEMBED_'+domain+String(n).padStart(2,'0');
+}
+function dragDroplet(ev,vecIdVal){
+  ev.target.classList.add('dragging');
+  ev.dataTransfer.setData('text/plain', JSON.stringify({vecId:vecIdVal}));
+}
+function dropOnEmbeddings(ev){
+  ev.preventDefault();
+  const zone=document.getElementById('embed-zone'); zone.classList.remove('drag-over');
+  const data=readDrop(ev);
+  if(!data.vecId) return;
+  const drop=vectorStore.find(v=>v.vecId===data.vecId);
+  if(!drop) return;
+  const domain=domainForObjId(drop.objId);
+  const related=vectorStore.filter(v=>domainForObjId(v.objId)===domain).map(v=>v.vecId);
+  let emb=embeddings.find(e=>e.domain===domain);
+  if(emb){
+    const before=emb.vecIds.length;
+    emb.vecIds=[...new Set([...emb.vecIds,...related])];
+    const added=emb.vecIds.length-before;
+    toast(added>0 ? ('Added '+added+' new vector coordinate(s) to '+emb.id) : (emb.id+' already has every '+domain+' coordinate.'),'green');
+  } else {
+    const name=nextEmbeddingName(domain);
+    emb={id:name, domain, vecIds:related, vec:vecId('embedding',name,domain), createdAt:Date.now()};
+    embeddings.push(emb);
+    toast('Created '+name+' — '+related.length+' vector coordinate(s) grouped for '+domain,'green');
+  }
+  renderEmbeddings();
+}
+function autoProposeEmbeddings(){
+  if(!vectorStore.length){ toast('Nothing in the lake yet to propose embeddings from.','gold'); return; }
+  const domains=[...new Set(vectorStore.map(v=>domainForObjId(v.objId)))];
+  const missing=domains.filter(d=>!embeddings.some(e=>e.domain===d));
+  if(!missing.length){ toast('Nothing new to propose — every domain already has an embedding.','gold'); renderEmbeddings(); return; }
+  missing.forEach(domain=>{
+    const related=vectorStore.filter(v=>domainForObjId(v.objId)===domain).map(v=>v.vecId);
+    const name=nextEmbeddingName(domain);
+    embeddings.push({id:name, domain, vecIds:related, vec:vecId('embedding',name,domain), createdAt:Date.now()});
+  });
+  toast('Lumi proposed '+missing.length+' new embedding(s): '+missing.join(', '),'gold');
+  renderEmbeddings();
+}
+function renderEmbeddings(){
+  const zone=document.getElementById('embed-zone');
+  if(!zone) return;
+  if(!embeddings.length){
+    zone.innerHTML='<p class="embed-empty">Drag a Datasphere data product droplet here to group it into a named embedding — or let Lumi auto-propose one per domain.</p>';
+    return;
+  }
+  zone.innerHTML = embeddings.map(e=>`
+    <div class="embed-card">
+      <div class="nm">${e.id}</div>
+      <div class="domain">${e.domain}</div>
+      <div class="count">${e.vecIds.length} vector coordinate${e.vecIds.length===1?'':'s'}</div>
+      <div class="vec">${e.vec}</div>
+    </div>`).join('');
+}
+
+/* ===================== step 7 — KG live prompts ===================== */
+const SAVED_KEY='sdadataaiSavedPrompts';
+function listSaved(){ try{ return JSON.parse(localStorage.getItem(SAVED_KEY)||'[]'); }catch(e){ return []; } }
+function savePrompt(id,text,objId){
+  const saved=listSaved();
+  if(saved.some(p=>p.id===id)){ toast('Already saved.','gold'); return; }
+  saved.push({id,text,objId}); localStorage.setItem(SAVED_KEY,JSON.stringify(saved));
+  toast('Saved "'+id+'" for reuse.','green'); renderPromptChips();
+}
+function deleteSaved(id){ localStorage.setItem(SAVED_KEY,JSON.stringify(listSaved().filter(p=>p.id!==id))); renderPromptChips(); }
+function generatedPrompts(){
+  const migrated=kgQueue.filter(q=>q.migrated);
+  const out=[];
+  migrated.forEach(q=>{
+    q.jouleArtifacts.forEach(a=>out.push({id:a.skill, text:a.prompt, objId:q.obj.id, key:q.key, vec:a.vec}));
+  });
+  return out;
+}
+let lastPrompts=[];
+function renderPromptChips(){
+  const el=document.getElementById('prompt-chips');
+  const prompts=generatedPrompts(); lastPrompts=prompts;
+  const saved=listSaved();
+  if(!prompts.length && !saved.length){ el.innerHTML='<p class="empty">Nothing migrated yet — drag a query child onto the Joule Node and run a migration to feed prompts here automatically.</p>'; return; }
+  el.innerHTML =
+    (prompts.length?`<div class="chip-label">Generated 1:1 from the queries you pushed to the Joule Node — click to test, bookmark to save:</div>
+     <div class="chip-row">${prompts.map((p,i)=>`
+       <span class="chip-wrap"><button class="chip-main" onclick="runGeneratedPrompt(${i})" title="${p.id}">${p.text}</button>
+       <button class="chip-save" onclick="savePrompt('${p.id}','${p.text.replace(/'/g,"\\'")}','${p.objId}')" title="Save"><i class="fa-solid fa-bookmark"></i></button></span>`).join('')}</div>`:'') +
+    (saved.length?`<div class="chip-label">Saved — ready to reuse any time:</div>
+     <div class="chip-row">${saved.map((p,i)=>`
+       <span class="chip-wrap"><button class="chip-main saved" onclick="runSavedPrompt(${i})" title="${p.id}">${p.text}</button>
+       <button class="chip-save" onclick="deleteSaved('${p.id}')" title="Remove"><i class="fa-solid fa-xmark"></i></button></span>`).join('')}</div>`:'');
+}
+function runGeneratedPrompt(i){ const p=lastPrompts[i]; if(!p) return; document.getElementById('prompt-input').value=p.text; runPrompt(p.objId); }
+function runSavedPrompt(i){ const p=listSaved()[i]; if(!p) return; document.getElementById('prompt-input').value=p.text; runPrompt(p.objId); }
+function runPrompt(knownObjId){
+  const qtext=document.getElementById('prompt-input').value.trim();
+  if(!qtext) return;
+  const migrated=kgQueue.filter(x=>x.migrated);
+  if(!migrated.length){
+    const card=document.getElementById('joule-card'); card.classList.add('show');
+    card.innerHTML='<p style="margin:0;">Nothing migrated yet — run a migration in Step 4, then come back and test a prompt against it.</p>';
+    return;
+  }
+  let target = knownObjId ? migrated.find(x=>x.obj.id===knownObjId) : null;
+  if(!target){
+    const low=qtext.toLowerCase();
+    target = migrated.find(x=>low.includes(x.obj.root.toLowerCase().replace('_',' ')) || low.includes(x.obj.name.toLowerCase()));
+  }
+  if(!target) target = migrated[hashStr(qtext)%migrated.length];
+  const h=hashStr(qtext+target.obj.id);
+  const amount=(1+(h%48)/10).toFixed(1);
+  const ccode=['1000','2000','2200','3100','1500'][h%5];
+  const vec = target.jouleArtifacts[0] ? target.jouleArtifacts[0].vec : vecId('query',target.obj.name,target.obj.id);
+  const card=document.getElementById('joule-card');
+  card.classList.add('show');
+  card.innerHTML = `
+    <div class="joule-head"><div class="joule-avatar"><i class="fa-solid fa-wand-magic-sparkles" style="color:#fff;font-size:0.8rem;"></i></div>
+      <div><div style="font-weight:800;font-size:0.84rem;">Joule</div><div class="joule-meta">resolved → ${target.obj.name}_SEM · ${vec}</div></div></div>
+    <p style="margin:0;font-size:0.92rem;line-height:1.5;">Your <b>${qtext}</b> figure is <b>$${amount}M USD</b> — concentrated in company code <b>${ccode}</b>, pulled from the converted data product now live on SAP Datasphere &amp; BDC.</p>`;
+}
+
+/* ===================== step 8 — KG errors ===================== */
+function seedKgErrors(){
+  kgErrors=[];
+  kgQueue.filter(q=>q.migrated).forEach(q=>{
+    const h=hashStr(q.obj.id+'_ERR');
+    if(q.pushdownSql.some(p=>p.routineKey==='EXPERT_ROUTINE')){
+      kgErrors.push({t:'Currency conversion routine not deterministic', d:'An Expert Routine push-down on '+q.obj.name+' referenced an external FX table not yet mapped in the target.', count:1+(h%4), severity:'high', conf:(70+h%26)+'%'});
+    }
+    if(q.reload && q.reload.label==='Delta'){
+      kgErrors.push({t:'DDIC table truncation on migrate', d:'Field length mismatch between the /BIC/ change-log table and target column on '+q.obj.name+' — recurring across this run.', count:1+((h>>3)%4), severity:'medium', conf:(55+h%31)+'%'});
+    }
+    if(q.pushdownSql.length>1){
+      kgErrors.push({t:'Multiple push-down routines on one object', d:q.pushdownSql.length+' ABAP routines on '+q.obj.name+' were converted independently — review the combined WHERE-clause interaction before go-live.', count:1, severity:'medium', conf:(60+h%21)+'%'});
+    }
+  });
+  if(kgErrors.length) toast(kgErrors.length+' recurring issue(s) pushed to KG Errors.','gold');
+}
+function setErrFilter(sev){ kgErrorFilter=sev; renderKgErrors(); }
+function renderKgErrors(){
+  const el=document.getElementById('kg-errors');
+  const filterEl=document.getElementById('kg-errors-filter');
+  filterEl.innerHTML = ['all','high','medium'].map(s=>`<span class="chip-wrap"><button class="chip-main ${kgErrorFilter===s?'saved':''}" onclick="setErrFilter('${s}')">${s==='all'?'All':s.charAt(0).toUpperCase()+s.slice(1)}</button></span>`).join('');
+  if(!kgErrors.length){ el.innerHTML='<p class="empty">No recurring issues yet — run a migration in Step 4 first.</p>'; return; }
+  const list = kgErrorFilter==='all' ? kgErrors : kgErrors.filter(e=>e.severity===kgErrorFilter);
+  if(!list.length){ el.innerHTML='<p class="empty">No '+kgErrorFilter+'-severity issues.</p>'; return; }
+  el.innerHTML = list.map(e=>`
+    <div class="err-row"><i class="fa-solid fa-triangle-exclamation ic"></i>
+      <div class="body"><div class="t">${e.t} <span class="sev-badge ${e.severity}">${e.severity}</span></div><div class="d">${e.d}</div><div class="conf-tag">Confidence: ${e.conf}</div></div>
+      <span class="count">×${e.count}</span></div>`).join('');
+}
+function scanForNewPatterns(){
+  const migrated=kgQueue.filter(q=>q.migrated);
+  if(!migrated.length){ toast('Nothing migrated yet to scan.','gold'); return; }
+  toast('Scanning KG for new patterns…','');
+  setTimeout(()=>{
+    const h=hashStr(String(Date.now()));
+    const obj=migrated[h%migrated.length];
+    kgErrors.push({t:'Newly detected: stale vector embedding', d:'A vector node for '+obj.obj.name+'_SEM drifted from its source description after a recent Clean Metadata edit.', count:1, severity: h%2?'high':'medium', conf:(60+h%35)+'%'});
+    toast('1 new pattern found and added to KG Errors.','gold');
+    renderKgErrors();
+  },900);
+}
+
+/* ===================== step 9 — approve ===================== */
+function renderApprove(){
+  const el=document.getElementById('approve-body');
+  const migratedCount=kgQueue.filter(q=>q.migrated).length;
+  let action;
+  if(bwPersona==='admin'){
+    action = (approvalStatus==='Pending Approval')
+      ? `<p class="scr-sub" style="margin:0;">Waiting on the Approver persona to sign off.</p>`
+      : approvalStatus==='Approved'
+        ? `<span class="pub-badge">Approved</span> <button class="btn btn-primary btn-sm" onclick="goStep(10)"><i class="fa-solid fa-arrow-right"></i> Continue to Production</button>`
+        : `<button class="btn btn-gold" ${migratedCount?'':'disabled'} onclick="submitForApproval()"><i class="fa-solid fa-paper-plane"></i> Submit ${migratedCount} Object${migratedCount===1?'':'s'} for Approval</button>`;
+  } else {
+    action = (approvalStatus==='Pending Approval')
+      ? `<button class="btn btn-primary btn-sm" onclick="decideApproval(true)"><i class="fa-solid fa-check"></i> Approve</button>
+         <button class="btn btn-outline btn-sm" onclick="decideApproval(false)"><i class="fa-solid fa-xmark"></i> Reject</button>`
+      : `<p class="scr-sub" style="margin:0;">${approvalStatus==='Approved'?'Already approved.':'Nothing pending your sign-off yet — Admin submits the package first.'}</p>`;
+  }
+  el.innerHTML = `<div class="signoff-row">
+    <div class="l"><b>Package status</b>${migratedCount} object${migratedCount===1?'':'s'} migrated · current status: <b>${approvalStatus}</b></div>
+    <div>${action}</div>
+  </div>`;
+}
+function submitForApproval(){
+  if(bwPersona!=='admin'){ toast('Only Admin can submit for approval.','gold'); return; }
+  approvalStatus='Pending Approval';
+  toast('Submitted — waiting on Approver sign-off.','gold');
+  renderApprove();
+}
+function decideApproval(approved){
+  if(bwPersona!=='approver'){ toast('Switch to the Approver persona to approve or reject.','gold'); return; }
+  approvalStatus = approved ? 'Approved' : 'Rejected';
+  toast(approved?'Approved — ready to push to production.':'Rejected — back to Admin for rework.', approved?'green':'gold');
+  renderApprove();
+}
+
+/* ===================== step 10 — production ===================== */
+function renderProduction(){
+  const el=document.getElementById('production-body');
+  const migrated=kgQueue.filter(q=>q.migrated);
+  if(productionLive){
+    el.innerHTML = `<div class="signoff-row"><div class="l"><b>Live</b>${migrated.length} object(s) now live in production.</div><span class="pub-badge">Live in Production</span></div>`;
+    return;
+  }
+  if(bwPersona!=='admin'){
+    el.innerHTML = `<div class="locked-note"><i class="fa-solid fa-lock"></i> Only the Admin persona can push to production.</div>`;
+    return;
+  }
+  if(approvalStatus!=='Approved'){
+    el.innerHTML = `<div class="locked-note gold"><i class="fa-solid fa-triangle-exclamation"></i> The package must be Approved (Step 9) before it can be pushed to production. Current status: ${approvalStatus}.</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="signoff-row">
+    <div class="l"><b>Ready</b>${migrated.length} approved object${migrated.length===1?'':'s'} waiting to go live.</div>
+    <button class="btn btn-gold" onclick="pushToProduction()"><i class="fa-solid fa-rocket"></i> Push to Production</button>
+  </div>`;
+}
+function pushToProduction(){
+  productionLive=true;
+  toast('Live — '+kgQueue.filter(q=>q.migrated).length+' object(s) pushed to production.','green');
+  renderProduction();
+}
+
+/* ===================== init ===================== */
+renderStepper();
+goStep(1);
+</script>
+</body>
+</html>

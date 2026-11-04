@@ -1,0 +1,25 @@
+services:
+  dev1:
+    build:
+      context: .
+      dockerfile: Dockerfile.webapp
+    container_name: sdadataai-docker1
+    ports:
+      - "8091:80"
+
+  dev2:
+    build:
+      context: .
+      dockerfile: Dockerfile.webapp
+    container_name: sdadataai-docker2
+    ports:
+      - "8092:80"
+
+  # Copy this block for each additional developer, bump the name/port:
+  # dev3:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.webapp
+  #   container_name: sdadataai-docker3
+  #   ports:
+  #     - "8093:80"

@@ -24,8 +24,10 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Connecting to ${ashost} (sysnr ${sysnr}, sysid ${sysid || '(none)'}, client ${client_})...`);
-  const client = new Client({ ashost, sysnr, sysid, client: client_, user, passwd, lang: 'EN' }, { timeout: 30 });
+  // open-rfc rejects sysid unless paired with mshost (message-server routing) --
+  // with a direct ashost connection, sysid is informational only, not passed in.
+  console.log(`Connecting to ${ashost} (sysnr ${sysnr}, sysid ${sysid || '(none, informational only)'}, client ${client_})...`);
+  const client = new Client({ ashost, sysnr, client: client_, user, passwd, lang: 'EN' }, { timeout: 30 });
 
   await client.open();
   console.log('Connection opened.');

@@ -29,10 +29,12 @@ const { z } = require('zod');
 function systemFromEnv(prefix) {
   const ashost = process.env[`${prefix}_SAP_ASHOST`];
   if (!ashost) return null; // not configured yet
+  // SDADATAAI_SAP_SID (e.g. "BI7") is informational only here -- open-rfc
+  // rejects sysid unless it's paired with mshost (message-server routing),
+  // and this is a direct ashost connection.
   return {
     ashost,
     sysnr: process.env[`${prefix}_SAP_SYSNR`] || '00',
-    sysid: process.env[`${prefix}_SAP_SID`], // SAP system ID, e.g. "BI7" — optional, open-rfc accepts it alongside ashost
     client: process.env[`${prefix}_SAP_CLIENT`],
     user: process.env[`${prefix}_SAP_USER`],
     passwd: process.env[`${prefix}_SAP_PASSWD`],

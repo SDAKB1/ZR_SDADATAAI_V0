@@ -3,50 +3,35 @@
 SAP CAP-based BW Migration platform with an integrated Brain AI system
 powered by LangChain and LangGraph.
 
-This repo is a scoped-down sibling of `ZR_SDAINTAI_V01` / `SDAINTAI`,
-carrying only the **BW migration cockpit** and the backend/MCP
-capabilities relevant to it. It does not carry SDAINTAI's PI/PO,
-MuleSoft, or Kara HR (RAP dev) content.
-
-## ZR_SDADATAAI_V0 — scope of this repo
+## Project Layout
 
 File or Folder | Purpose
 ---------|----------
 `app/aiconx/webapp/sdadataai_bw_cockpit.html` | The BW migration cockpit UI (self-contained, no local JS/CSS deps)
-`mcp/bw-rfc-server/` | Standalone MCP server for SAP BW/S4HANA RFC calls (SDADATAAI active, SDAINTAI reserved) — ported from SDAINTAI's `mcp/pipo-rfc-server`
-`srv/utils/bwMcpClient.js` | CAP-side helper to call `mcp/bw-rfc-server` — ported from `pipoMcpClient.js`
-`srv/brain-service.cds/.js` | Brain AI — self-learning event capture/insight engine (generic mechanism kept; the original SDAINTAI seed knowledge was PI/PO-specific and was emptied out, not guessed-replaced — see comments in `srv/brain-service.js`)
-`srv/document-service.cds/.js` | Document parsing (Claude) feeding the Brain's vector store — generic, already BW-aware (`sourceContext` example: `bw_bdc_source_system`)
-`db/` | `brain-schema.cds`, `documents-schema.cds`
+`mcp/bw-rfc-server/` | Standalone MCP server exposing SAP BW/S4HANA RFC calls
+`srv/utils/bwMcpClient.js` | CAP-side helper to call `mcp/bw-rfc-server`
+`srv/brain-service.cds/.js` | Brain AI — self-learning event capture/insight engine
+`srv/document-service.cds/.js` | Document parsing (Claude) feeding the Brain's vector store
+`db/` | Domain models — `brain-schema.cds`, `documents-schema.cds`
 `mtar/` | Pre-built `.mtar` deployment archives
+`readme.md` | This guide
 
-**Deliberately NOT carried over from SDAINTAI**, because it's PI/PO,
-MuleSoft, or Kara-HR-specific rather than BW:
-- `app/aiconx/webapp/btp_*` (the BTP/PI-PO cockpit)
-- `srv/aiconx-service.cds/.js` + `db/aiconx-schema.cds` (`importBtpAssets`, Mule2BTP mock data)
-- `srv/rap-dev-orchestrator-service.cds/.js` + `db/rap-dev-schema.cds` + `mcp/adt-mcp-server` (Kara HR RAP dev orchestration)
-- `mcp/pipo-rfc-server` (replaced by `mcp/bw-rfc-server`)
-- `db/sql/sdaintai_pattern_vector_setup.sql` (PI/PO & MuleSoft pattern-vector DDL)
-- `docs/SAD-Solution-Architecture.*`, `docs/TDD-Technical-Design.*`, `docs/MCP on CF SDA.md` (written around the PI/PO+MuleSoft+Boomi+Informatica business scope — not reused here to avoid carrying that narrative into a BW-scoped repo)
-
-**Known residual limitation, flagged rather than silently fixed:**
-`srv/brain-service.js`'s Migration Advisor pipeline (`classifyObjectNode`
-→ `scoreComplexityNode` → `recommendToolNode` → ...) still takes
-PI/PO-shaped inputs (`adapterType: idoc|soap|rest|...`, `isBpmProcess`,
-`hasZFields`, `isEdiBased`) — those describe an *integration interface*,
-not a BW object. Only the seed *data* (`MIGRATION_KNOWLEDGE`, `BAPI_MAP`,
-`HUB_PACKAGE_MAP`, the `isKnowledge` array) was emptied out per an
-explicit scoping decision; redesigning the action's input schema around
-real BW object attributes (InfoProvider type, data flow depth, ABAP
-routine count, etc.) is new design work, not a straight port, and is
-still open.
+**Known open item:** the Brain's Migration Advisor pipeline
+(`classifyObjectNode` → `scoreComplexityNode` → `recommendToolNode` →
+...) currently takes integration-interface-shaped inputs (`adapterType`,
+`isBpmProcess`, `hasZFields`) rather than real BW object attributes
+(InfoProvider type, data flow depth, ABAP routine count, etc.), and its
+seed knowledge arrays (`MIGRATION_KNOWLEDGE`, `BAPI_MAP`,
+`HUB_PACKAGE_MAP`, `isKnowledge`) are currently empty rather than
+populated with guessed data. Add real BW seed data and redesign the
+input schema around real BW object attributes as that knowledge becomes
+available — don't guess it.
 
 ## Developer workflow: one branch + one local Docker preview per developer
 
-Same pattern as `ZR_SDAINTAI_V01`: each developer works on their own
-branch and previews their own changes in their own local Docker
-container — nobody's build or `cf` deploy touches anyone else's work or
-the shared production route.
+Each developer works on their own branch and previews their own
+changes in their own local Docker container — nobody's build or `cf`
+deploy touches anyone else's work or the shared production route.
 
 1. Clone the repo and create your own branch:
    ```bash

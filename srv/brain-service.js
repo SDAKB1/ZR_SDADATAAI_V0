@@ -2,13 +2,11 @@ const cds = require('@sap/cds');
 const { verifyKey, readState, writeState, isBrainEnabled } = require('./ai/brainConfig');
 const { getVectorStore } = require('./ai/vectorStore');
 
-// ── SAP Migration knowledge base (seeded into vector store) ──────────────────
-// Intentionally empty in this BW/SDADATAAI-scoped repo: the original SDAINTAI
-// content here (GLMAST/MATMAS/ORDERS05/... IDoc+BAPI+iFlow objects) is PI/PO
-// domain data, not BW. Left empty rather than guessed/invented BW equivalents
-// -- the Migration Advisor pipeline below still works with no seed knowledge,
-// it just falls back to its rule-based/generic branches until real BW object
-// data is added here.
+// ── BW migration knowledge base (seeded into vector store) ───────────────────
+// Intentionally empty for now, rather than filled with guessed/invented BW
+// object data -- the Migration Advisor pipeline below still works with no
+// seed knowledge, it just falls back to its rule-based/generic branches
+// until real BW object data is added here.
 const MIGRATION_KNOWLEDGE = [];
 
 // BAPI lookup for simple objects
@@ -616,11 +614,8 @@ module.exports = class BrainService extends cds.ApplicationService {
         seeded++;
       }
 
-      // Seed BW/SDADATAAI capability knowledge. The original SDAINTAI version of
-      // this array was ~40 strings of PI/PO/Integration-Suite/AEM vocabulary --
-      // all removed as out of scope for this repo (see MIGRATION_KNOWLEDGE above).
-      // Only the one line that was already genuinely BW-related is kept; add real
-      // BW domain vocabulary here as it's learned, rather than guessed.
+      // Seed BW capability knowledge -- kept minimal rather than guessed; add
+      // real BW domain vocabulary here as it's learned.
       const isKnowledge = [
         'SAP BW migration BDC Datasphere AI Foundation InfoCube ODS ADSO master data hierarchy analytics',
       ];

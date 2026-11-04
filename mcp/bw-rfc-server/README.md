@@ -3,11 +3,6 @@
 If you've cloned/branched this repo, this is how to actually **call**
 the deployed MCP server (or run it locally).
 
-Ported from SDAINTAI's `mcp/pipo-rfc-server` (see the sibling
-`ZR_SDAINTAI_V01` repo) — same generic RFC-call/metadata-lookup design,
-just with the allowlisted systems flipped: **SDADATAAI** is the active
-one here, **SDAINTAI** is the reserved slot.
-
 ## What this is, in one line
 
 A standalone MCP server that lets Claude (or any MCP client, or

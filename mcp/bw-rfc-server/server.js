@@ -109,7 +109,7 @@ function buildMcpServer() {
         'Which allowlisted system to call. Only SDADATAAI is configured today; ' +
         'SDAINTAI is reserved for a later session.'
       ),
-      rfc_name: z.string().describe('The RFC/BAPI name to execute, e.g. BAPI_PO_GETITEMS.'),
+      rfc_name: z.string().describe('The RFC/BAPI name to execute, e.g. RSA1_ODSO_GET_DETAIL.'),
       import_parameters: z.record(z.any()).optional().default({})
         .describe('Import parameters for the RFC.'),
       changing_parameters: z.record(z.any()).optional().default({})

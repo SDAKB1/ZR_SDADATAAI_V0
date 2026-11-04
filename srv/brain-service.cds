@@ -61,18 +61,22 @@ service BrainService @(path: '/odata/v4/brain', requires: 'any') {
   };
 
   // ── SAP Migration Advisor — AI-powered object analysis ──
+  // NOTE: these input fields are still shaped for an integration interface,
+  // not a BW object (InfoProvider type, data flow depth, ABAP routine count,
+  // etc.) -- see readme.md's "Known open item". Kept as-is pending a real
+  // redesign around actual BW object attributes.
   action migrationAdvisor(
     key         : String,
-    objectId    : String,       // e.g. "MATMAS05", "ICO_ORDERS_LEGACY", "ZSD_A01"
+    objectId    : String,       // e.g. object technical name
     objectDesc  : String,       // human-readable description
-    segmentCount: Integer,      // number of IDoc segments or iFlow steps
-    hasZFields  : Boolean,      // has custom Z-fields or BADI
+    segmentCount: Integer,      // structural size metric
+    hasZFields  : Boolean,      // has custom/Z fields
     mappingType : String,       // graphical | xslt | java | abap | groovy | none
     adapterType : String,       // idoc | soap | rest | sftp | as2 | jdbc | rfc | jms | custom
     volumePerDay: Integer,      // estimated daily message/record volume
-    isBpmProcess: Boolean,      // is it a ccBPM / stateful BPM process?
-    isEdiBased  : Boolean,      // involves external EDI trading partner (AS2)?
-    sourceSystem: String        // LEGACY_ERP | SAP_PI_PO | SAP_BW | NON_SAP_SAAS
+    isBpmProcess: Boolean,      // is it a stateful BPM process?
+    isEdiBased  : Boolean,      // involves external EDI trading partner?
+    sourceSystem: String        // LEGACY_ERP | SAP_BW | NON_SAP_SAAS
   ) returns {
     objectId         : String;
     objectType       : String;   // classified type

@@ -389,6 +389,17 @@ p.scr-sub{margin:0 0 20px;color:var(--text-muted);font-size:0.88rem;}
       </div>
       <div id="prompt-chips"></div>
       <div class="joule-card" id="joule-card"></div>
+
+      <div class="embed-section">
+        <h2 class="scr-title" style="font-size:1.05rem;"><i class="fa-solid fa-database" style="color:var(--cyan);"></i> CJX Live Pilot — 0D_NW_C01</h2>
+        <p class="scr-sub">Proof of concept for the hot/cold data design: this hits the real <code class="mono">sdadataai-bw-rfc-mcp</code> backend, which pulls actual row data from the SAP demo InfoCube <code class="mono">0D_NW_C01</code> once, archives it as Parquet, and answers from that archive on repeat queries instead of re-reading BW every time.</p>
+        <div class="prompt-row">
+          <input id="cjx-pilot-input" placeholder="e.g. total quantity, net value, cost" class="mono" value="total net value">
+          <button class="btn btn-outline" onclick="runCjxPilot()"><i class="fa-solid fa-bolt"></i> Ask CJX (Live)</button>
+        </div>
+        <div id="cjx-pilot-result" class="live-banner" style="margin-top:14px;"></div>
+      </div>
+
       <div class="foot-row">
         <button class="btn btn-primary" onclick="goStep(8)"><i class="fa-solid fa-arrow-right"></i> Continue to KG Errors</button>
       </div>
@@ -1253,6 +1264,30 @@ function runPrompt(knownObjId){
     <div class="joule-head"><div class="joule-avatar"><i class="fa-solid fa-wand-magic-sparkles" style="color:#fff;font-size:0.8rem;"></i></div>
       <div><div style="font-weight:800;font-size:0.84rem;">Joule</div><div class="joule-meta">resolved → ${target.obj.name}_SEM · ${vec}</div></div></div>
     <p style="margin:0;font-size:0.92rem;line-height:1.5;">Your <b>${qtext}</b> figure is <b>$${amount}M USD</b> — concentrated in company code <b>${ccode}</b>, pulled from the converted data product now live on SAP Datasphere &amp; BDC.</p>`;
+}
+
+// Real hot/cold dereference against bw-rfc-server's CJX pilot endpoint —
+// see docs/SDADATAAI-CJX-HotCold-Data-Architecture.md. Not mocked: this
+// actually pulls row data from 0D_NW_C01 on first call and reads the
+// Parquet archive back on repeat calls.
+async function runCjxPilot(){
+  const q = document.getElementById('cjx-pilot-input').value.trim() || 'total';
+  const el = document.getElementById('cjx-pilot-result');
+  el.className = 'live-banner';
+  el.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Asking CJX...';
+  try {
+    const res = await fetch(BW_API_BASE + '/api/cjx/query?q=' + encodeURIComponent(q));
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || ('HTTP '+res.status));
+    const srcLbl = data.source === 'cold-pull-triggered'
+      ? 'COLD — just pulled '+data.rowCount+' rows live from BW ('+data.pointer.sourceTable+')'
+      : 'HOT — served from the Parquet archive, no BW call ('+data.rowCount+' rows, pulled '+new Date(data.pointer.pulledAt).toLocaleTimeString()+')';
+    el.className = 'live-banner ' + (data.source === 'cold-pull-triggered' ? 'error' : 'live');
+    el.innerHTML = `<i class="fa-solid fa-circle" style="font-size:8px;"></i> ${srcLbl} — answer: <code class="mono">${JSON.stringify(data.answer)}</code>`;
+  } catch(err) {
+    el.className = 'live-banner error';
+    el.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> CJX call failed: '+(err.message||String(err));
+  }
 }
 
 /* ===================== step 8 — KG errors ===================== */

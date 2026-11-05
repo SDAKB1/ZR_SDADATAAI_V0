@@ -14,6 +14,9 @@
  * a short demo, but verify real calls work before relying on it further.
  */
 
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const express = require('express');
 const basicAuth = require('basic-auth');
 const { Client } = require('open-rfc');
@@ -124,6 +127,100 @@ async function readCatalogNames(systemName, tableName, fields, options, maxRows)
     .map((row) => (row.WA || '').split('|')[0].trim())
     .filter(Boolean)
     .map((name) => ({ [nameField]: name }));
+}
+
+// Same RFC_READ_TABLE mechanics as readCatalogNames, but keeps every
+// requested field per row instead of only the first -- needed for actual
+// fact-table data pulls (multiple key figures + dimension keys per row),
+// not just a name list.
+async function readFullRows(systemName, tableName, fields, options, maxRows) {
+  const result = await withRfcConnection(systemName, (client) => client.call('RFC_READ_TABLE', {
+    QUERY_TABLE: tableName,
+    DELIMITER: '|',
+    FIELDS: fields.map((f) => ({ FIELDNAME: f })),
+    OPTIONS: (options || []).map((text) => ({ TEXT: text })),
+    ROWCOUNT: maxRows || 100
+  }));
+  return (result.DATA || []).map((row) => {
+    const parts = (row.WA || '').split('|');
+    const obj = {};
+    fields.forEach((f, i) => { obj[f] = (parts[i] || '').trim(); });
+    return obj;
+  });
+}
+
+// --- Hot/Cold pilot: 0D_NW_C01 -------------------------------------------
+// Proof of concept for the CJX hot/cold design (see
+// docs/SDADATAAI-CJX-HotCold-Data-Architecture.md): pull real row data out
+// of one standard SAP demo InfoCube, archive it as Parquet, and only read
+// that archive back when a CJX query actually asks for it -- the pointer
+// (rowCount/pulledAt/archiveUri) is the only thing kept "hot" in memory.
+//
+// InfoCubes don't expose row data through a BAPI; the classic approach
+// (used by BW extraction tools for decades) is reading the cube's own fact
+// table directly. E = compressed/active data, F = uncompressed request
+// data -- a demo cube's data is typically in E after compression, so that
+// is tried first. Fields confirmed live via DD03L against BI7: 7 dimension
+// foreign keys (KEY_0D_NW_C01*) + 6 key figures (D_NW_*).
+
+const PILOT_CUBE = '0D_NW_C01';
+const PILOT_TABLES = ['/BI0/E0D_NW_C01', '/BI0/F0D_NW_C01'];
+const PILOT_FIELDS = [
+  'KEY_0D_NW_C011', 'KEY_0D_NW_C012', 'KEY_0D_NW_C013', 'KEY_0D_NW_C014',
+  'KEY_0D_NW_C015', 'KEY_0D_NW_C016', 'KEY_0D_NW_C017',
+  'KEY_0D_NW_C01P', 'KEY_0D_NW_C01T', 'KEY_0D_NW_C01U',
+  'D_NW_COSTV', 'D_NW_DOCUM', 'D_NW_NETV', 'D_NW_OORQT', 'D_NW_OORV', 'D_NW_QUANT'
+];
+const PILOT_KEY_FIGURES = ['D_NW_COSTV', 'D_NW_DOCUM', 'D_NW_NETV', 'D_NW_OORQT', 'D_NW_OORV', 'D_NW_QUANT'];
+const ARCHIVE_DIR = path.join(os.tmpdir(), 'cjx-archive');
+const ARCHIVE_PATH = path.join(ARCHIVE_DIR, `${PILOT_CUBE}.parquet`);
+
+// The pointer -- the HOT part. Everything else (the Parquet bytes) is COLD
+// and only ever opened inside dereferencePilotData().
+let pilotPointer = null; // {cube, sourceTable, rowCount, pulledAt, archiveUri}
+
+async function pullPilotData() {
+  let rows = [];
+  let sourceTable = null;
+  for (const table of PILOT_TABLES) {
+    rows = await readFullRows('SDADATAAI', table, PILOT_FIELDS, [], 100);
+    if (rows.length) { sourceTable = table; break; }
+  }
+  fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
+  const { parquetWriteFile } = await import('hyparquet-writer');
+  parquetWriteFile({
+    filename: ARCHIVE_PATH,
+    columnData: PILOT_FIELDS.map((name) => ({
+      name, type: 'STRING', data: rows.map((r) => r[name] || '')
+    }))
+  });
+  pilotPointer = {
+    cube: PILOT_CUBE,
+    sourceTable: sourceTable || '(no rows found)',
+    rowCount: rows.length,
+    pulledAt: new Date().toISOString(),
+    archiveUri: '/api/data/0d_nw_c01/archive'
+  };
+  return pilotPointer;
+}
+
+async function readPilotArchive() {
+  const { asyncBufferFromFile, parquetReadObjects } = await import('hyparquet');
+  const file = await asyncBufferFromFile(ARCHIVE_PATH);
+  return parquetReadObjects({ file });
+}
+
+// The dereference step CJX calls: hot pointer check, cold pull only if
+// missing/stale, then open the archive to answer the actual query.
+async function dereferencePilotData(maxAgeMs) {
+  let source = 'archive-cache';
+  const isStale = !pilotPointer || (Date.now() - new Date(pilotPointer.pulledAt).getTime()) > (maxAgeMs || 10 * 60 * 1000);
+  if (isStale) {
+    await pullPilotData();
+    source = 'cold-pull-triggered';
+  }
+  const rows = await readPilotArchive();
+  return { rows, source, pointer: pilotPointer };
 }
 
 const CATALOG_TYPES = {
@@ -265,6 +362,53 @@ Object.entries(CATALOG_TYPES).forEach(([key, cfg]) => {
       res.status(500).json({ items: [], error: err.message || String(err), note: cfg.note });
     }
   });
+});
+
+// --- Hot/Cold pilot routes -------------------------------------------------
+
+app.get('/api/data/0d_nw_c01/pull', async (req, res) => {
+  try {
+    res.json(await pullPilotData());
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.get('/api/data/0d_nw_c01/pointer', (req, res) => {
+  if (!pilotPointer) return res.status(404).json({ error: 'Not pulled yet -- call /api/data/0d_nw_c01/pull or /api/cjx/query first.' });
+  res.json(pilotPointer);
+});
+
+app.get('/api/data/0d_nw_c01/archive', (req, res) => {
+  if (!fs.existsSync(ARCHIVE_PATH)) return res.status(404).json({ error: 'Not pulled yet.' });
+  res.type('application/octet-stream').sendFile(ARCHIVE_PATH);
+});
+
+// CJX query, pinned to the one pilot cube for this proof of concept --
+// object resolution (which cube the prompt means) is the next build step
+// per the design doc, not implemented here. Dereferences the hot pointer,
+// cold-pulling only if missing/stale, then answers from the Parquet archive.
+app.get('/api/cjx/query', async (req, res) => {
+  try {
+    const q = (req.query.q || '').toLowerCase();
+    const { rows, source, pointer } = await dereferencePilotData();
+    const sums = {};
+    PILOT_KEY_FIGURES.forEach((kf) => {
+      sums[kf] = rows.reduce((acc, r) => acc + (parseFloat(r[kf]) || 0), 0);
+    });
+    const matchedFigure = PILOT_KEY_FIGURES.find((kf) => q.includes(kf.toLowerCase().replace('d_nw_', '')));
+    res.json({
+      cube: PILOT_CUBE,
+      prompt: req.query.q || '',
+      source, // 'archive-cache' = served from Parquet, no BW call; 'cold-pull-triggered' = just pulled live
+      pointer,
+      rowCount: rows.length,
+      answer: matchedFigure ? { [matchedFigure]: sums[matchedFigure] } : sums,
+      sampleRows: rows.slice(0, 5)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
 });
 
 app.use('/mcp', requireBasicAuth);

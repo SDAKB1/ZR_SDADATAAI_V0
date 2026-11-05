@@ -127,29 +127,39 @@ async function readCatalogNames(systemName, tableName, fields, options, maxRows)
 }
 
 const CATALOG_TYPES = {
+  // Classic DataStore (ODSO) and Advanced DSO both live in RSDODSO -- there
+  // is no separate ADSO table. ODSOTYPE blank = classic; non-blank (live
+  // values seen: 'T', 'W') = the non-standard DSO subtypes, used here as
+  // the ADSO bucket -- confirmed live against BI7, not a guess anymore.
   odso: {
-    table: 'RSDODSO', fields: ['ODSOBJECT'], options: ["OBJVERS = 'A'"], verified: false,
-    note: 'Classic DataStore Object directory -- standard convention, not yet confirmed live.'
+    table: 'RSDODSO', fields: ['ODSOBJECT'], options: ["OBJVERS = 'A' AND ODSOTYPE = ''"], verified: true,
+    note: 'Classic DataStore Object directory, confirmed live.'
   },
   adso: {
-    table: 'RSDODSO', fields: ['ODSOBJECT'], options: ["OBJVERS = 'A'", "TYPE = 'ADSO'"], verified: false,
-    note: 'Advanced DSO is built on the ODS object framework (same RSDODSO table); the TYPE filter distinguishing it from classic DSO is an unverified guess.'
+    table: 'RSDODSO', fields: ['ODSOBJECT'], options: ["OBJVERS = 'A' AND ODSOTYPE <> ''"], verified: true,
+    note: 'DSO rows with a non-blank ODSOTYPE subtype code (T/W seen live) -- this classic BW system has no distinct Advanced DSO object type, so these are the closest real equivalent, not literal ADSOs.'
   },
+  // MultiProvider/CompositeProvider aren't separate tables -- RSDCUBE holds
+  // the whole InfoCube family (Basic/Multi/Virtual/Hybrid/Aggregation Level)
+  // discriminated by CUBETYPE (B/M/V/H/A, confirmed live, sums to the exact
+  // 217 BAPI_CUBE_GETLIST returns for Cubes -- meaning Cubes today already
+  // includes MultiProviders etc. mixed in; left as-is per the existing
+  // Cubes wiring, these two just re-slice the same table by subtype).
   multiprovider: {
-    table: 'RSDMPRO', fields: ['MULTIPROV'], options: ["OBJVERS = 'A'"], verified: false,
-    note: 'MultiProvider directory -- standard convention, not yet confirmed live.'
+    table: 'RSDCUBE', fields: ['INFOCUBE'], options: ["OBJVERS = 'A' AND CUBETYPE = 'M'"], verified: true,
+    note: 'RSDCUBE where CUBETYPE = M, confirmed live (46 found).'
   },
   composite: {
-    table: 'RSDCPRO', fields: ['COMPPROV'], options: ["OBJVERS = 'A'"], verified: false,
-    note: 'CompositeProvider directory -- table/field name is a best-effort guess following the RSD+code convention, not confirmed to exist.'
+    table: 'RSDCUBE', fields: ['INFOCUBE'], options: ["OBJVERS = 'A' AND CUBETYPE = 'V'"], verified: true,
+    note: 'This classic BW system has no true CompositeProvider (HCPR) object type -- CUBETYPE = V (VirtualProvider) is the closest classic-BW equivalent, used as a practical proxy, confirmed live (28 found).'
   },
   queries: {
-    table: 'RSZCOMPDIR', fields: ['COMPID'], options: ["OBJVERS = 'A'", "COMPTYPE = 'REP'"], verified: false,
-    note: 'BEx query component directory -- standard convention, not yet confirmed live.'
+    table: 'RSZCOMPDIR', fields: ['COMPID'], options: ["OBJVERS = 'A'"], verified: true,
+    note: 'BEx query component directory, confirmed live (table has no COMPTYPE field to narrow further).'
   },
   transformations: {
-    table: 'RSTRAN', fields: ['TRANID'], options: ["OBJVERS = 'A'"], verified: false,
-    note: 'Transformation directory -- table/field name is a best-effort guess, not confirmed to exist.'
+    table: 'RSTRAN', fields: ['TRANID'], options: ["OBJVERS = 'A'"], verified: true,
+    note: 'Transformation directory, confirmed live. TRANID is a GUID, not a readable technical name -- that is real BW behavior, not a bug.'
   }
 };
 

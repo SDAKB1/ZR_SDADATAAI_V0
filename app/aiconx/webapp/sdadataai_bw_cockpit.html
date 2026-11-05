@@ -69,6 +69,11 @@ p.scr-sub{margin:0 0 20px;color:var(--text-muted);font-size:0.88rem;}
 
 /* ===== Step 1 connect ===== */
 .connect-wrap{max-width:460px;}
+.live-banner{margin-top:14px;padding:10px 14px;border-radius:10px;background:var(--panel2);border:1px solid var(--border);font-size:0.78rem;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:8px;}
+.live-banner:empty{display:none;}
+.live-banner.live{background:rgba(46,204,113,0.12);border-color:#2ecc71;color:#2ecc71;}
+.live-banner.error{background:rgba(231,76,60,0.12);border-color:#e74c3c;color:#e74c3c;}
+.badge.live-badge{background:#2ecc71;color:#06241a;margin-left:6px;}
 
 /* ===== 3D type tabs + swipe deck ===== */
 .type-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:22px;}
@@ -263,10 +268,11 @@ p.scr-sub{margin:0 0 20px;color:var(--text-muted);font-size:0.88rem;}
   <section class="screen" data-step="1">
     <div class="panel connect-wrap">
       <h2 class="scr-title">Connect to BW</h2>
-      <p class="scr-sub">Point at the source BW 7.0 / 7.5 / BW4HANA system. This is a client-side demo — no live RFC/ODATA call is made.</p>
-      <div class="field"><label>System ID</label><input id="bw-sysid" value="BWP" class="mono"></div>
-      <div class="field"><label>Client</label><input id="bw-client" value="100" class="mono"></div>
+      <p class="scr-sub">Point at the source BW 7.0 / 7.5 / BW4HANA system. Connects live over RFC via the SDADATAAI bridge — real InfoCube data comes back from the system below.</p>
+      <div class="field"><label>System ID</label><input id="bw-sysid" value="BI7" class="mono"></div>
+      <div class="field"><label>Client</label><input id="bw-client" value="001" class="mono"></div>
       <button class="btn btn-primary" onclick="doConnect()"><i class="fa-solid fa-plug"></i> Connect &amp; Browse Objects</button>
+      <div id="live-status-banner" class="live-banner"></div>
     </div>
   </section>
 
@@ -275,6 +281,7 @@ p.scr-sub{margin:0 0 20px;color:var(--text-muted);font-size:0.88rem;}
     <div class="panel">
       <h2 class="scr-title">Browse &amp; Push to KG</h2>
       <p class="scr-sub">Swipe through each BW object type, then drag a card down onto the canvas to explode its hierarchy. Check the where-used children you want to migrate, then drag each checked child onto the matching node — a query goes to the Joule Node, everything else goes to the KG Node.</p>
+      <div id="live-status-banner-2" class="live-banner"></div>
       <div class="type-tabs" id="type-tabs"></div>
       <div class="deck-stage"><div class="deck-track" id="deck-track"></div></div>
       <div class="deck-nav">
@@ -629,8 +636,53 @@ function removeFromQueue(key){
 }
 
 /* ===================== step 1 ===================== */
-function doConnect(){
-  toast('Connected to '+(document.getElementById('bw-sysid').value||'BWP')+' — objects loaded.','green');
+const BW_API_BASE = 'https://sdadataai-bw-rfc-mcp.cfapps.us10.hana.ondemand.com';
+let liveStatus = {connected:false, cubeCount:0, sysid:'', error:''};
+
+function renderLiveBanner(){
+  ['live-status-banner','live-status-banner-2'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(liveStatus.connected){
+      el.className = 'live-banner live';
+      el.innerHTML = `<i class="fa-solid fa-circle" style="font-size:8px;color:#2ecc71;"></i> LIVE — connected to ${liveStatus.sysid}, ${liveStatus.cubeCount} real InfoCubes pulled via BAPI_CUBE_GETLIST`;
+    } else if(liveStatus.error){
+      el.className = 'live-banner error';
+      el.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Live connection failed (${liveStatus.error}) — showing demo data`;
+    } else {
+      el.className = 'live-banner';
+      el.innerHTML = `<i class="fa-solid fa-circle" style="font-size:8px;color:var(--text-muted);"></i> Not connected — demo data only`;
+    }
+  });
+}
+
+async function doConnect(){
+  const sysid = document.getElementById('bw-sysid').value || 'BWP';
+  const btn = document.querySelector('.connect-wrap .btn-primary');
+  if(btn){ btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connecting to '+sysid+'...'; }
+  toast('Connecting to '+sysid+'...', 'gold');
+  try {
+    const res = await fetch(BW_API_BASE + '/api/cubes');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    const cubes = data.cubes || [];
+    OBJ_CACHE['cubes'] = cubes.map(c => ({
+      id: c.INFOCUBE, name: c.INFOCUBE,
+      desc: c.TEXTLONG || c.INFOCUBE,
+      root: c.INFOAREA || '',
+      isCustom: /^(Z|\/)/i.test(c.INFOCUBE || ''),
+      complexity: COMPLEXITY[hashStr(c.INFOCUBE || '')%3],
+      live: true
+    }));
+    liveStatus = {connected:true, cubeCount:cubes.length, sysid, error:''};
+    toast('Connected to '+sysid+' — '+cubes.length+' real InfoCubes loaded live from BW.','green');
+  } catch(err){
+    liveStatus = {connected:false, cubeCount:0, sysid, error:err.message||String(err)};
+    toast('Live connection failed ('+liveStatus.error+') — showing demo data instead.','red');
+  }
+  if(btn){ btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plug"></i> Connect &amp; Browse Objects'; }
+  renderLiveBanner();
+  activeType = 'cubes';
   goStep(2);
 }
 
@@ -656,6 +708,7 @@ function renderDeck(){
     return `<div class="obj-card" draggable="true" ondragstart="dragCard(event,${i})" ondragend="this.classList.remove('dragging')" style="transform:translate(${tx}px,0) translateZ(${tz}px) rotateY(${rotate}deg) scale(${scale});opacity:${opacity};z-index:${10-abs};"
                  onclick="deckCardClick(${i})">
         <span class="badge ${o.isCustom?'custom':''}">${o.isCustom?'Z Custom':'SAP Standard'}</span>
+        ${o.live?'<span class="badge live-badge"><i class="fa-solid fa-circle" style="font-size:6px;"></i> LIVE</span>':''}
         <div>
           <div class="nm">${o.name}</div>
           <div class="ds">${o.desc}</div>
@@ -1248,6 +1301,7 @@ function pushToProduction(){
 /* ===================== init ===================== */
 renderStepper();
 goStep(1);
+renderLiveBanner();
 </script>
 </body>
 </html>

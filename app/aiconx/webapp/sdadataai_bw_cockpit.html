@@ -446,12 +446,13 @@ const BW_TYPES = [
   {key:'hierarchies', label:'Hierarchies', icon:'fa-sitemap'},
   {key:'masterdata', label:'Attributes / Master Data', icon:'fa-id-card'},
   {key:'queries', label:'Queries', icon:'fa-magnifying-glass-chart'},
+  {key:'transformations', label:'Transformations', icon:'fa-arrow-right-arrow-left'},
 ];
 
 const NAME_ROOTS = ['FIAA','COPA','SD_SALES','MM_PUR','HR_PA','PM_ORD','CRM_OPP','LOGIS','GL','CAPEX'];
 const COMPLEXITY = ['simple','medium','complex'];
 function buildMockObjects(typeKey){
-  const prefix = {multiprovider:'0MP_',composite:'0COMP_',cubes:'0C_',opendso:'ZODS_',dso:'0DS_',adso:'/BIC/A',hierarchies:'0H_',masterdata:'0',queries:'ZQ_'}[typeKey];
+  const prefix = {multiprovider:'0MP_',composite:'0COMP_',cubes:'0C_',opendso:'ZODS_',dso:'0DS_',adso:'/BIC/A',hierarchies:'0H_',masterdata:'0',queries:'ZQ_',transformations:'TRCS_'}[typeKey];
   const out=[];
   for(let i=0;i<7;i++){
     const root = NAME_ROOTS[(hashStr(typeKey+i))%NAME_ROOTS.length];
@@ -637,15 +638,36 @@ function removeFromQueue(key){
 
 /* ===================== step 1 ===================== */
 const BW_API_BASE = 'https://sdadataai-bw-rfc-mcp.cfapps.us10.hana.ondemand.com';
-let liveStatus = {connected:false, cubeCount:0, sysid:'', error:''};
+let liveStatus = {connected:false, cubeCount:0, sysid:'', error:'', typeCounts:{}, typeErrors:{}};
+
+// Same /api/cubes pattern (BAPI_CUBE_GETLIST), extended to every other BW
+// object type the catalog deck shows. Each endpoint returns {items:[{<field>:
+// name}], verified, note} — verified:false means the backing table/field
+// name is a best-effort guess (see server.js), not yet confirmed live;
+// a failed/empty one just leaves that type's deck on demo data, same as a
+// failed cube connection would.
+const TYPE_LIVE_CONFIG = {
+  dso:             {endpoint:'/api/odso',            nameField:'ODSOBJECT'},
+  adso:            {endpoint:'/api/adso',            nameField:'ODSOBJECT'},
+  multiprovider:   {endpoint:'/api/multiprovider',   nameField:'MULTIPROV'},
+  composite:       {endpoint:'/api/composite',       nameField:'COMPPROV'},
+  queries:         {endpoint:'/api/queries',         nameField:'COMPID'},
+  transformations: {endpoint:'/api/transformations', nameField:'TRANID'},
+};
 
 function renderLiveBanner(){
   ['live-status-banner','live-status-banner-2'].forEach(id=>{
     const el = document.getElementById(id);
     if(!el) return;
     if(liveStatus.connected){
+      const extra = Object.entries(liveStatus.typeCounts).map(([k,n])=>{
+        const lbl = BW_TYPES.find(t=>t.key===k);
+        return (lbl?lbl.label:k)+': '+n;
+      }).join(', ');
+      const failed = Object.keys(liveStatus.typeErrors);
       el.className = 'live-banner live';
-      el.innerHTML = `<i class="fa-solid fa-circle" style="font-size:8px;color:#2ecc71;"></i> LIVE — connected to ${liveStatus.sysid}, ${liveStatus.cubeCount} real InfoCubes pulled via BAPI_CUBE_GETLIST`;
+      el.innerHTML = `<i class="fa-solid fa-circle" style="font-size:8px;color:#2ecc71;"></i> LIVE — connected to ${liveStatus.sysid}. Cubes: ${liveStatus.cubeCount}${extra?', '+extra:''}.`
+        + (failed.length ? ` <span style="color:var(--gold);">(${failed.join(', ')} unavailable — demo data shown for those)</span>` : '');
     } else if(liveStatus.error){
       el.className = 'live-banner error';
       el.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Live connection failed (${liveStatus.error}) — showing demo data`;
@@ -656,11 +678,31 @@ function renderLiveBanner(){
   });
 }
 
+async function fetchLiveType(typeKey, cfg){
+  const res = await fetch(BW_API_BASE + cfg.endpoint);
+  const data = await res.json();
+  if(!res.ok || data.error) throw new Error(data.error || ('HTTP '+res.status));
+  const items = data.items || [];
+  OBJ_CACHE[typeKey] = items.map(row => {
+    const name = row[cfg.nameField] || '';
+    return {
+      id: name, name,
+      desc: name,
+      root: '',
+      isCustom: /^(Z|\/)/i.test(name),
+      complexity: COMPLEXITY[hashStr(name)%3],
+      live: true
+    };
+  });
+  return items.length;
+}
+
 async function doConnect(){
   const sysid = document.getElementById('bw-sysid').value || 'BWP';
   const btn = document.querySelector('.connect-wrap .btn-primary');
   if(btn){ btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connecting to '+sysid+'...'; }
   toast('Connecting to '+sysid+'...', 'gold');
+  let cubeCount = 0, connected = false, connErr = '';
   try {
     const res = await fetch(BW_API_BASE + '/api/cubes');
     if(!res.ok) throw new Error('HTTP '+res.status);
@@ -674,11 +716,31 @@ async function doConnect(){
       complexity: COMPLEXITY[hashStr(c.INFOCUBE || '')%3],
       live: true
     }));
-    liveStatus = {connected:true, cubeCount:cubes.length, sysid, error:''};
-    toast('Connected to '+sysid+' — '+cubes.length+' real InfoCubes loaded live from BW.','green');
+    cubeCount = cubes.length;
+    connected = true;
   } catch(err){
-    liveStatus = {connected:false, cubeCount:0, sysid, error:err.message||String(err)};
-    toast('Live connection failed ('+liveStatus.error+') — showing demo data instead.','red');
+    connErr = err.message||String(err);
+  }
+
+  const typeCounts = {}, typeErrors = {};
+  if(connected){
+    const results = await Promise.allSettled(
+      Object.entries(TYPE_LIVE_CONFIG).map(([typeKey,cfg]) => fetchLiveType(typeKey,cfg).then(n=>[typeKey,n]))
+    );
+    results.forEach((r,i) => {
+      const typeKey = Object.keys(TYPE_LIVE_CONFIG)[i];
+      if(r.status==='fulfilled'){ typeCounts[typeKey] = r.value[1]; }
+      else { typeErrors[typeKey] = r.reason && r.reason.message || String(r.reason); }
+    });
+  }
+
+  if(connected){
+    liveStatus = {connected:true, cubeCount, sysid, error:'', typeCounts, typeErrors};
+    const totalLive = cubeCount + Object.values(typeCounts).reduce((a,b)=>a+b,0);
+    toast('Connected to '+sysid+' — '+totalLive+' real BW objects loaded live.','green');
+  } else {
+    liveStatus = {connected:false, cubeCount:0, sysid, error:connErr, typeCounts:{}, typeErrors:{}};
+    toast('Live connection failed ('+connErr+') — showing demo data instead.','red');
   }
   if(btn){ btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plug"></i> Connect &amp; Browse Objects'; }
   renderLiveBanner();

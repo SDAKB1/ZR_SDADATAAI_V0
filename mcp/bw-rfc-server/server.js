@@ -96,6 +96,63 @@ async function withRfcConnection(systemName, fn) {
   }
 }
 
+// --- Generic catalog table reads (RFC_READ_TABLE) -------------------------
+// BAPI_CUBE_GETLIST is the only dedicated "list" BAPI BW ships for any
+// InfoProvider type -- there's no equivalent BAPI for ODS/ADSO/MultiProvider/
+// CompositeProvider/Queries/Transformations. RFC_READ_TABLE (remote-enabled
+// on effectively every SAP system) reads the underlying metadata directory
+// table directly instead. Table/field names below follow SAP's standard
+// "RSD + 4-char object-type code" convention for the InfoProvider family
+// (RSDCUBE, RSDODSO, RSDMPRO, ...); CATALOG_TYPES entries marked `verified:
+// false` are this convention applied by inference, not confirmed against a
+// live system the way BAPI_CUBE_GETLIST's 217 real cubes were -- if a guess
+// is wrong, RFC_READ_TABLE just errors cleanly (unknown table/field) and
+// that one card falls back to demo data via the same live/error banner
+// pattern already used for cubes, same as the runbook's own discovery
+// approach for unknown FMs.
+
+async function readCatalogNames(systemName, tableName, fields, options, maxRows) {
+  const result = await withRfcConnection(systemName, (client) => client.call('RFC_READ_TABLE', {
+    QUERY_TABLE: tableName,
+    DELIMITER: '|',
+    FIELDS: fields.map((f) => ({ FIELDNAME: f })),
+    OPTIONS: (options || []).map((text) => ({ TEXT: text })),
+    ROWCOUNT: maxRows || 1000
+  }));
+  const nameField = fields[0];
+  return (result.DATA || [])
+    .map((row) => (row.WA || '').split('|')[0].trim())
+    .filter(Boolean)
+    .map((name) => ({ [nameField]: name }));
+}
+
+const CATALOG_TYPES = {
+  odso: {
+    table: 'RSDODSO', fields: ['ODSOBJECT'], options: ["OBJVERS = 'A'"], verified: false,
+    note: 'Classic DataStore Object directory -- standard convention, not yet confirmed live.'
+  },
+  adso: {
+    table: 'RSDODSO', fields: ['ODSOBJECT'], options: ["OBJVERS = 'A'", "TYPE = 'ADSO'"], verified: false,
+    note: 'Advanced DSO is built on the ODS object framework (same RSDODSO table); the TYPE filter distinguishing it from classic DSO is an unverified guess.'
+  },
+  multiprovider: {
+    table: 'RSDMPRO', fields: ['MULTIPROV'], options: ["OBJVERS = 'A'"], verified: false,
+    note: 'MultiProvider directory -- standard convention, not yet confirmed live.'
+  },
+  composite: {
+    table: 'RSDCPRO', fields: ['COMPPROV'], options: ["OBJVERS = 'A'"], verified: false,
+    note: 'CompositeProvider directory -- table/field name is a best-effort guess following the RSD+code convention, not confirmed to exist.'
+  },
+  queries: {
+    table: 'RSZCOMPDIR', fields: ['COMPID'], options: ["OBJVERS = 'A'", "COMPTYPE = 'REP'"], verified: false,
+    note: 'BEx query component directory -- standard convention, not yet confirmed live.'
+  },
+  transformations: {
+    table: 'RSTRAN', fields: ['TRANID'], options: ["OBJVERS = 'A'"], verified: false,
+    note: 'Transformation directory -- table/field name is a best-effort guess, not confirmed to exist.'
+  }
+};
+
 // --- MCP server + tools ----------------------------------------------------
 
 function buildMcpServer() {
@@ -187,6 +244,17 @@ app.get('/api/cubes', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+Object.entries(CATALOG_TYPES).forEach(([key, cfg]) => {
+  app.get(`/api/${key}`, async (req, res) => {
+    try {
+      const rows = await readCatalogNames('SDADATAAI', cfg.table, cfg.fields, cfg.options, 1000);
+      res.json({ items: rows, verified: cfg.verified, note: cfg.note });
+    } catch (err) {
+      res.status(500).json({ items: [], error: err.message || String(err), note: cfg.note });
+    }
+  });
 });
 
 app.use('/mcp', requireBasicAuth);

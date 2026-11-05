@@ -398,6 +398,14 @@ p.scr-sub{margin:0 0 20px;color:var(--text-muted);font-size:0.88rem;}
           <button class="btn btn-outline" onclick="runCjxPilot()"><i class="fa-solid fa-bolt"></i> Ask CJX (Live)</button>
         </div>
         <div id="cjx-pilot-result" class="live-banner" style="margin-top:14px;"></div>
+
+        <p class="scr-sub" style="margin-top:18px;">Resolve by real business value — not a raw dimension ID. Goes value → SID → DIMID → fact rows → aggregate, live against BI7.</p>
+        <div class="grid2">
+          <div class="field"><label>Company Code (Organization)</label><input id="cjx-org-input" class="mono" placeholder="e.g. 1111" value="1111"></div>
+          <div class="field"><label>Product</label><input id="cjx-product-input" class="mono" placeholder="e.g. CN0F21" value="CN0F21"></div>
+        </div>
+        <button class="btn btn-outline" onclick="runCjxResolve()"><i class="fa-solid fa-link"></i> Resolve &amp; Aggregate (Live)</button>
+        <div id="cjx-resolve-result" class="live-banner" style="margin-top:14px;"></div>
       </div>
 
       <div class="foot-row">
@@ -1287,6 +1295,33 @@ async function runCjxPilot(){
   } catch(err) {
     el.className = 'live-banner error';
     el.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> CJX call failed: '+(err.message||String(err));
+  }
+}
+
+// Business-value resolve + aggregate — value -> SID -> DIMID -> fact rows,
+// live. See docs/SDADATAAI-TDD-BW-SID-Resolution.md.
+async function runCjxResolve(){
+  const org = document.getElementById('cjx-org-input').value.trim();
+  const product = document.getElementById('cjx-product-input').value.trim();
+  const el = document.getElementById('cjx-resolve-result');
+  el.className = 'live-banner';
+  el.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Resolving...';
+  try {
+    const params = new URLSearchParams();
+    if (org) params.set('org', org);
+    if (product) params.set('product', product);
+    const res = await fetch(BW_API_BASE + '/api/cjx/resolve?' + params.toString());
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || ('HTTP '+res.status));
+    el.className = 'live-banner live';
+    el.innerHTML = `<i class="fa-solid fa-circle" style="font-size:8px;color:#2ecc71;"></i> `
+      + `Org <b>${data.org||'-'}</b> → SID ${data.resolvedOrgSid} (${data.matchedOrgDimIds.length} DIMIDs) · `
+      + `Product <b>${data.product||'-'}</b> → SID ${data.resolvedProductSid} (${data.matchedProductDimIds.length} DIMIDs) · `
+      + `<b>${data.rowCount} matching rows</b> — Net Value: <code class="mono">${Number(data.aggregates.D_NW_NETV||0).toLocaleString()}</code>, `
+      + `Quantity: <code class="mono">${data.aggregates.D_NW_QUANT}</code>`;
+  } catch(err) {
+    el.className = 'live-banner error';
+    el.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Resolve failed: '+(err.message||String(err));
   }
 }
 

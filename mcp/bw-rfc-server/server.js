@@ -223,6 +223,94 @@ async function dereferencePilotData(maxAgeMs) {
   return { rows, source, pointer: pilotPointer };
 }
 
+// --- SID resolution: business value -> real fact rows ---------------------
+// Fact-table rows are keyed by DIMID (dimension surrogate), not by SID or
+// business value directly -- resolving "company code 1111" to actual rows
+// takes three hops, each confirmed live against BI7 (see
+// docs/SDADATAAI-TDD-BW-SID-Resolution.md for the full writeup):
+//   1. value -> SID, via the characteristic's SID table. The table name is
+//      NOT simply /BI0/S<InfoObject> -- BW generates a shortened internal
+//      name (RSDIOBJ-FIELDNM) when the display name doesn't fit the 9-char
+//      ABAP field-name budget, e.g. 0D_NW_CODE -> field name D_NW_CODE ->
+//      table /BI0/SD_NW_CODE.
+//   2. SID -> one or more DIMIDs, via the cube's dimension table
+//      (/BI0/D<cube><dim#>), since one SID can appear in many dimension
+//      rows (other characteristics sharing that dimension vary).
+//   3. DIMID set -> fact rows, via an IN-style OR filter on the fact table.
+//
+// Pinned to the two pilot characteristics (Organization/0D_NW_CODE,
+// Product/0D_NW_PROD) proven live; generalizing to arbitrary characteristics
+// is future work, not done here.
+
+const PILOT_CHARACTERISTICS = {
+  org: { sidTable: '/BI0/SD_NW_CODE', sidField: 'D_NW_CODE', dimTable: '/BI0/D0D_NW_C011', dimSidField: 'SID_0D_NW_CODE', factField: 'KEY_0D_NW_C011' },
+  product: { sidTable: '/BI0/SD_NW_PROD', sidField: 'D_NW_PROD', dimTable: '/BI0/D0D_NW_C013', dimSidField: 'SID_0D_NW_PROD', factField: 'KEY_0D_NW_C013' }
+};
+
+// RFC_READ_TABLE's OPTIONS table is raw text concatenation, max 72 chars per
+// row, with no implicit separator between rows -- so a long WHERE clause
+// has to be chunked at <=72 chars per entry, not passed as one long string.
+function chunkWhereClause(text, maxLen) {
+  const limit = maxLen || 72;
+  const chunks = [];
+  let rest = text;
+  while (rest.length > limit) {
+    let cut = rest.lastIndexOf(' ', limit);
+    if (cut <= 0) cut = limit;
+    chunks.push(rest.slice(0, cut));
+    rest = rest.slice(cut);
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
+
+async function resolveValueToDimIds(characteristic, value) {
+  const cfg = PILOT_CHARACTERISTICS[characteristic];
+  if (!cfg) throw new Error(`Unknown characteristic "${characteristic}". Known: ${Object.keys(PILOT_CHARACTERISTICS).join(', ')}.`);
+  const sidRows = await readFullRows('SDADATAAI', cfg.sidTable, ['SID', cfg.sidField], [`${cfg.sidField} = '${value}'`], 5);
+  if (!sidRows.length) return { cfg, value, sid: null, dimIds: [] };
+  const sid = sidRows[0].SID;
+  const dimRows = await readFullRows('SDADATAAI', cfg.dimTable, ['DIMID'], [`${cfg.dimSidField} = ${sid}`], 500);
+  return { cfg, value, sid, dimIds: dimRows.map((r) => r.DIMID).filter(Boolean) };
+}
+
+// Resolves org + product business values to real fact rows and aggregates
+// the pilot cube's key figures over the intersection -- the end-to-end
+// proof that CJX can answer "total X for company code Y, product Z" with
+// real numbers, not mocked ones.
+async function queryPilotByBusinessValues({ org, product }) {
+  const resolved = {};
+  const filters = [];
+  if (org) {
+    resolved.org = await resolveValueToDimIds('org', org);
+    if (resolved.org.dimIds.length) {
+      filters.push('(' + resolved.org.dimIds.map((id) => `${PILOT_CHARACTERISTICS.org.factField} = ${id}`).join(' OR ') + ')');
+    }
+  }
+  if (product) {
+    resolved.product = await resolveValueToDimIds('product', product);
+    if (resolved.product.dimIds.length) {
+      filters.push('(' + resolved.product.dimIds.map((id) => `${PILOT_CHARACTERISTICS.product.factField} = ${id}`).join(' OR ') + ')');
+    }
+  }
+  if (!filters.length) return { resolved, rows: [], sums: {}, sourceTable: null };
+
+  const whereClause = filters.join(' AND ');
+  const options = chunkWhereClause(whereClause);
+
+  let rows = [];
+  let sourceTable = null;
+  for (const table of PILOT_TABLES) {
+    rows = await readFullRows('SDADATAAI', table, PILOT_FIELDS, options, 2000);
+    if (rows.length) { sourceTable = table; break; }
+  }
+  const sums = {};
+  PILOT_KEY_FIGURES.forEach((kf) => {
+    sums[kf] = rows.reduce((acc, r) => acc + (parseFloat(r[kf]) || 0), 0);
+  });
+  return { resolved, rows, sums, sourceTable };
+}
+
 const CATALOG_TYPES = {
   // Classic DataStore (ODSO) and Advanced DSO both live in RSDODSO -- there
   // is no separate ADSO table. ODSOTYPE blank = classic; non-blank (live
@@ -405,6 +493,32 @@ app.get('/api/cjx/query', async (req, res) => {
       rowCount: rows.length,
       answer: matchedFigure ? { [matchedFigure]: sums[matchedFigure] } : sums,
       sampleRows: rows.slice(0, 5)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// CJX query by real business values -- resolves org/product to SIDs/DIMIDs
+// live (see queryPilotByBusinessValues above), filters the fact table, and
+// returns the aggregated key figures plus what each value resolved to.
+app.get('/api/cjx/resolve', async (req, res) => {
+  try {
+    const { org, product } = req.query;
+    if (!org && !product) return res.status(400).json({ error: 'Pass ?org=<value> and/or ?product=<value>.' });
+    const result = await queryPilotByBusinessValues({ org, product });
+    res.json({
+      cube: PILOT_CUBE,
+      org: org || null,
+      product: product || null,
+      resolvedOrgSid: result.resolved.org ? result.resolved.org.sid : null,
+      resolvedProductSid: result.resolved.product ? result.resolved.product.sid : null,
+      matchedOrgDimIds: result.resolved.org ? result.resolved.org.dimIds : [],
+      matchedProductDimIds: result.resolved.product ? result.resolved.product.dimIds : [],
+      sourceTable: result.sourceTable,
+      rowCount: result.rows.length,
+      aggregates: result.sums,
+      sampleRows: result.rows.slice(0, 10)
     });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });

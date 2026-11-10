@@ -267,10 +267,15 @@ p.scr-sub{margin:0 0 20px;color:var(--text-muted);font-size:0.88rem;}
   <!-- STEP 1 — CONNECT -->
   <section class="screen" data-step="1">
     <div class="panel connect-wrap">
-      <h2 class="scr-title">Connect to BW</h2>
-      <p class="scr-sub">Point at the source BW 7.0 / 7.5 / BW4HANA system. Connects live over RFC via the SDADATAAI bridge — real InfoCube data comes back from the system below.</p>
-      <div class="field"><label>System ID</label><input id="bw-sysid" value="BI7" class="mono"></div>
-      <div class="field"><label>Client</label><input id="bw-client" value="001" class="mono"></div>
+      <h2 class="scr-title">Connect to Source</h2>
+      <p class="scr-sub">Point at a BW 7.0 / 7.5 / BW4HANA system (RFC) or the PI8/PJ2 PI/PO system (HTTP, via Cloud Connector) — both go through the SDADATAAI bridge, no credentials ever touch the browser.</p>
+      <div class="field"><label>System</label>
+        <select id="bw-sysid" class="mono" onchange="onSourceChange()">
+          <option value="BI7">BI7 — BW 7.0 (RFC)</option>
+          <option value="PI8">PI8 — PI/PO, system PJ2 (HTTP, non-BW source)</option>
+        </select>
+      </div>
+      <div class="field" id="bw-client-field"><label>Client</label><input id="bw-client" value="001" class="mono"></div>
       <button class="btn btn-primary" onclick="doConnect()"><i class="fa-solid fa-plug"></i> Connect &amp; Browse Objects</button>
       <div id="live-status-banner" class="live-banner"></div>
     </div>
@@ -283,6 +288,7 @@ p.scr-sub{margin:0 0 20px;color:var(--text-muted);font-size:0.88rem;}
       <p class="scr-sub">Swipe through each BW object type, then drag a card down onto the canvas to explode its hierarchy. Check the where-used children you want to migrate, then drag each checked child onto the matching node — a query goes to the Joule Node, everything else goes to the KG Node.</p>
       <div id="live-status-banner-2" class="live-banner"></div>
       <div class="type-tabs" id="type-tabs"></div>
+      <div id="pi8-status-banner" class="live-banner"></div>
       <div class="deck-stage"><div class="deck-track" id="deck-track"></div></div>
       <div class="deck-nav">
         <button onclick="deckMove(-1)"><i class="fa-solid fa-chevron-left"></i></button>
@@ -408,6 +414,12 @@ p.scr-sub{margin:0 0 20px;color:var(--text-muted);font-size:0.88rem;}
         <div id="cjx-resolve-result" class="live-banner" style="margin-top:14px;"></div>
       </div>
 
+      <div class="embed-section" style="margin-top:22px;">
+        <h2 class="scr-title" style="font-size:1.05rem;"><i class="fa-solid fa-right-left" style="color:var(--gold);"></i> PI8 Compare Queue (PIPO source vs. BW pilot)</h2>
+        <p class="scr-sub">Objects pushed from the <b>PI8 Objects (PIPO source)</b> tab in Browse &amp; Push to KG. Shown side-by-side with the BW <code class="mono">0D_NW_C01</code> aggregate above for manual comparison — this doesn't run an automated cross-system value diff yet, just proves both sources are reachable through the same MCP bridge.</p>
+        <div id="pi8-compare-queue"></div>
+      </div>
+
       <div class="foot-row">
         <button class="btn btn-primary" onclick="goStep(8)"><i class="fa-solid fa-arrow-right"></i> Continue to KG Errors</button>
       </div>
@@ -466,11 +478,33 @@ const BW_TYPES = [
   {key:'masterdata', label:'Attributes / Master Data', icon:'fa-id-card'},
   {key:'queries', label:'Queries', icon:'fa-magnifying-glass-chart'},
   {key:'transformations', label:'Transformations', icon:'fa-arrow-right-arrow-left'},
+  {key:'pi8objects', label:'PI8 Objects (PIPO source)', icon:'fa-diagram-project'},
 ];
 
 const NAME_ROOTS = ['FIAA','COPA','SD_SALES','MM_PUR','HR_PA','PM_ORD','CRM_OPP','LOGIS','GL','CAPEX'];
 const COMPLEXITY = ['simple','medium','complex'];
+// PI8/PJ2 isn't a BW system -- no InfoCube-style hierarchy, so its cards are
+// hand-named ESR/Directory-style objects (interfaces, channels, ICOs)
+// instead of the generic NAME_ROOTS pattern. Demo data until a real ESR
+// enumeration API is wired in (see /api/pi8/ping for the proven-live part).
+// `type` is the real ESR/Directory artifact-type label (what PI/PO itself
+// calls each object), shown as its own badge on the card -- not just an id.
+const PI8_OBJECTS = [
+  {id:'SI_TIMEBAL_OUT', type:'Service Interface (Outbound)', desc:'Outbound service interface — time balance export'},
+  {id:'ICO_KARA_SFTP_PUSH', type:'Integrated Configuration', desc:'Integrated configuration — SFTP push to Kara'},
+  {id:'CC_HTTP_PI8_SENDER', type:'Communication Channel (Sender)', desc:'Sender communication channel — HTTPS, Basic Auth'},
+  {id:'CC_SFTP_KARA_RECEIVER', type:'Communication Channel (Receiver)', desc:'Receiver communication channel — SFTP, PGP encrypt'},
+  {id:'MM_TIMEBAL_CSV', type:'Operation Mapping', desc:'Message mapping — time balance XML to CSV'},
+  {id:'IF_OCEAN_TIME_BAL', type:'Service Interface (Abstract)', desc:'Interface object — Ocean time balance'},
+  {id:'SWCV_OCEAN_KARA', type:'Software Component Version', desc:'Software component version — Ocean/Kara integration'},
+];
 function buildMockObjects(typeKey){
+  if(typeKey==='pi8objects'){
+    return PI8_OBJECTS.map(o=>({
+      id:o.id, name:o.id, desc:o.desc, root:'PI8', artifactType:o.type,
+      isCustom:true, complexity:COMPLEXITY[hashStr(o.id)%3],
+    }));
+  }
   const prefix = {multiprovider:'0MP_',composite:'0COMP_',cubes:'0C_',opendso:'ZODS_',dso:'0DS_',adso:'/BIC/A',hierarchies:'0H_',masterdata:'0',queries:'ZQ_',transformations:'TRCS_'}[typeKey];
   const out=[];
   for(let i=0;i<7;i++){
@@ -615,7 +649,7 @@ function goStep(n){
   if(n===4) renderMigrateGate();
   if(n===5) renderResults();
   if(n===6){ renderLake(); renderEmbeddings(); }
-  if(n===7) renderPromptChips();
+  if(n===7){ renderPromptChips(); renderPi8CompareQueue(); }
   if(n===8) renderKgErrors();
   if(n===9) renderApprove();
   if(n===10) renderProduction();
@@ -658,6 +692,76 @@ function removeFromQueue(key){
 /* ===================== step 1 ===================== */
 const BW_API_BASE = 'https://sdadataai-bw-rfc-mcp.cfapps.us10.hana.ondemand.com';
 let liveStatus = {connected:false, cubeCount:0, sysid:'', error:'', typeCounts:{}, typeErrors:{}};
+
+/* ===================== PI8 (PI/PO, non-BW source) ===================== */
+let pi8Status = {checked:false, reachable:false, destinations:{}, error:''};
+let pi8CompareQueue = [];
+
+function onSourceChange(){
+  const sysid = document.getElementById('bw-sysid').value;
+  const clientField = document.getElementById('bw-client-field');
+  if(clientField) clientField.style.display = sysid==='PI8' ? 'none' : '';
+}
+
+async function checkPi8Live(){
+  try{
+    const res = await fetch(BW_API_BASE + '/api/pi8/ping');
+    const data = await res.json();
+    pi8Status = {checked:true, reachable:!!data.reachable, destinations:data.destinations||{}, error:data.error||''};
+  } catch(err){
+    pi8Status = {checked:true, reachable:false, destinations:{}, error: err.message||String(err)};
+  }
+  renderPi8Banner();
+}
+
+function renderPi8Banner(){
+  const el = document.getElementById('pi8-status-banner');
+  if(!el) return;
+  if(!pi8Status.checked){
+    el.className='live-banner';
+    el.innerHTML = '<i class="fa-solid fa-circle" style="font-size:8px;color:var(--text-muted);"></i> Checking PI8/PJ2 reachability via Cloud Connector...';
+    return;
+  }
+  if(pi8Status.reachable){
+    const dests = Object.entries(pi8Status.destinations).map(([k,v])=>k+': HTTP '+(v.status||'—')).join(', ');
+    el.className='live-banner live';
+    el.innerHTML = `<i class="fa-solid fa-circle" style="font-size:8px;color:#2ecc71;"></i> LIVE — MCP reached PI8 (PJ2) through Cloud Connector (${dests}). Non-BW source proven. Object list below is demo data pending a real ESR enumeration API.`;
+  } else {
+    el.className='live-banner error';
+    el.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> PI8 not reachable (${pi8Status.error}) — check the Destination/Cloud Connector mapping.`;
+  }
+}
+
+function pushToCjxCompare(objId){
+  const obj = (OBJ_CACHE['pi8objects']||[]).find(o=>o.id===objId);
+  if(!obj) return;
+  if(pi8CompareQueue.some(o=>o.id===objId)){ toast(obj.name+' already queued for compare.','gold'); return; }
+  pi8CompareQueue.push({...obj, reachable: pi8Status.reachable, checkedAt: new Date().toISOString()});
+  toast(obj.name+' queued — see KG Live · Prompts (Step 7) to compare against the BW pilot cube.','green');
+  renderPi8CompareQueue();
+}
+function removeFromCjxCompare(objId){
+  pi8CompareQueue = pi8CompareQueue.filter(o=>o.id!==objId);
+  renderPi8CompareQueue();
+}
+function renderPi8CompareQueue(){
+  const el = document.getElementById('pi8-compare-queue');
+  if(!el) return;
+  if(!pi8CompareQueue.length){
+    el.innerHTML = '<div class="empty">No PI8 objects queued yet — go to Browse &amp; Push to KG, switch to the PI8 Objects tab, and click "Push to CJX Compare" on a card.</div>';
+    return;
+  }
+  el.innerHTML = pi8CompareQueue.map(o=>`
+    <div class="err-row">
+      <div>
+        <div class="d"><b>${o.name}</b> — ${o.desc}</div>
+        <div class="conf-tag">${o.reachable
+          ? '<span style="color:#2ecc71;">● PI8 reachable at queue time</span>'
+          : '<span style="color:#e74c3c;">● PI8 unreachable at queue time</span>'} — source: PIPO (PJ2), non-BW</div>
+      </div>
+      <button class="btn btn-outline" style="font-size:0.68rem;padding:3px 9px;" onclick="removeFromCjxCompare('${o.id}')"><i class="fa-solid fa-xmark"></i></button>
+    </div>`).join('');
+}
 
 // Same /api/cubes pattern (BAPI_CUBE_GETLIST), extended to every other BW
 // object type the catalog deck shows. Each endpoint returns {items:[{<field>:
@@ -718,6 +822,7 @@ async function fetchLiveType(typeKey, cfg){
 
 async function doConnect(){
   const sysid = document.getElementById('bw-sysid').value || 'BWP';
+  if(sysid==='PI8') return doConnectPi8();
   const btn = document.querySelector('.connect-wrap .btn-primary');
   if(btn){ btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connecting to '+sysid+'...'; }
   toast('Connecting to '+sysid+'...', 'gold');
@@ -767,12 +872,41 @@ async function doConnect(){
   goStep(2);
 }
 
+async function doConnectPi8(){
+  const btn = document.querySelector('.connect-wrap .btn-primary');
+  if(btn){ btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connecting to PI8...'; }
+  toast('Connecting to PI8 (PJ2)...', 'gold');
+  OBJ_CACHE['pi8objects'] = buildMockObjects('pi8objects');
+  await checkPi8Live();
+  if(pi8Status.reachable){
+    liveStatus = {connected:true, cubeCount:0, sysid:'PI8', error:'', typeCounts:{pi8objects:PI8_OBJECTS.length}, typeErrors:{}};
+    toast('Connected to PI8 (PJ2) — non-BW source reachable via Cloud Connector.','green');
+  } else {
+    liveStatus = {connected:false, cubeCount:0, sysid:'PI8', error:pi8Status.error||'unreachable', typeCounts:{}, typeErrors:{}};
+    toast('PI8 connection failed ('+(pi8Status.error||'unreachable')+').','red');
+  }
+  if(btn){ btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plug"></i> Connect &amp; Browse Objects'; }
+  renderLiveBanner();
+  activeType = 'pi8objects';
+  goStep(2);
+  renderPi8Banner();
+}
+
 /* ===================== step 2 — 3D deck + KG canvas ===================== */
 function renderTypeTabs(){
   document.getElementById('type-tabs').innerHTML = BW_TYPES.map(t=>`
     <button class="${t.key===activeType?'active':''}" onclick="switchType('${t.key}')"><i class="fa-solid ${t.icon}"></i> ${t.label}</button>`).join('');
 }
-function switchType(key){ activeType=key; deckIndex=0; renderTypeTabs(); renderDeck(); }
+function switchType(key){
+  activeType=key; deckIndex=0; renderTypeTabs(); renderDeck();
+  if(key==='pi8objects'){
+    renderPi8Banner();
+    if(!pi8Status.checked) checkPi8Live();
+  } else {
+    const banner = document.getElementById('pi8-status-banner');
+    if(banner){ banner.innerHTML=''; banner.className='live-banner'; }
+  }
+}
 function renderDeck(){
   renderTypeTabs();
   const list=OBJ_CACHE[activeType];
@@ -789,12 +923,14 @@ function renderDeck(){
     return `<div class="obj-card" draggable="true" ondragstart="dragCard(event,${i})" ondragend="this.classList.remove('dragging')" style="transform:translate(${tx}px,0) translateZ(${tz}px) rotateY(${rotate}deg) scale(${scale});opacity:${opacity};z-index:${10-abs};"
                  onclick="deckCardClick(${i})">
         <span class="badge ${o.isCustom?'custom':''}">${o.isCustom?'Z Custom':'SAP Standard'}</span>
+        ${o.artifactType?`<span class="badge" style="background:rgba(229,169,59,0.16);color:var(--gold);margin-left:4px;">${o.artifactType}</span>`:''}
         ${o.live?'<span class="badge live-badge"><i class="fa-solid fa-circle" style="font-size:6px;"></i> LIVE</span>':''}
         <div>
           <div class="nm">${o.name}</div>
           <div class="ds">${o.desc}</div>
         </div>
         <span class="cx ${o.complexity}">${o.complexity}</span>
+        ${activeType==='pi8objects'?`<button class="btn btn-outline" style="margin-top:6px;font-size:0.64rem;padding:3px 8px;align-self:flex-start;" onclick="event.stopPropagation(); pushToCjxCompare('${o.id}')"><i class="fa-solid fa-right-left"></i> Push to CJX Compare</button>`:''}
       </div>`;
   }).join('');
 }

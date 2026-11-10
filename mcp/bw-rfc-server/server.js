@@ -23,6 +23,7 @@ const { Client } = require('open-rfc');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const { z } = require('zod');
+const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
 // --- Allowlisted system --------------------------------------------------
 // Connection params come entirely from env vars. If ASHOST isn't configured,
@@ -450,6 +451,44 @@ Object.entries(CATALOG_TYPES).forEach(([key, cfg]) => {
       res.status(500).json({ items: [], error: err.message || String(err), note: cfg.note });
     }
   });
+});
+
+// --- PI8 (PI/PO, non-BW source) reachability proof --------------------------
+// Separate connectivity path from everything above: PI8/PJ2 is HTTP, not RFC,
+// and only reachable through the Cloud Connector virtual host configured as
+// destinations in the destination service (bound to this app, ProxyType
+// OnPremise) -- not via env vars like SDADATAAI_SAP_*. The actual configured
+// destination names are PO_PJ2_ESR (Enterprise Services Repository -- the
+// object catalog) and PO_PJ2_DIR (Integration Directory -- runtime config),
+// both pointed at nwjava.consultsda.com:443 / PJ2. A non-2xx HTTP response
+// still proves the tunnel/destination chain works (the real system
+// answered), so only a connection-level failure (no err.response) counts as
+// unreachable.
+const PI8_DESTINATIONS = ['PO_PJ2_ESR', 'PO_PJ2_DIR'];
+
+app.get('/api/pi8/ping', async (req, res) => {
+  const destinations = {};
+  for (const destinationName of PI8_DESTINATIONS) {
+    try {
+      const response = await executeHttpRequest(
+        { destinationName },
+        { method: 'get', url: '/', timeout: 10000 }
+      );
+      destinations[destinationName] = { reachable: true, status: response.status };
+    } catch (err) {
+      if (err.response) {
+        destinations[destinationName] = {
+          reachable: true,
+          status: err.response.status,
+          note: 'Non-2xx response, but the system answered -- tunnel is working.'
+        };
+      } else {
+        destinations[destinationName] = { reachable: false, error: err.message || String(err) };
+      }
+    }
+  }
+  const reachable = Object.values(destinations).some((d) => d.reachable);
+  res.json({ reachable, system: 'PI8', systemname: 'PJ2', via: 'Cloud Connector (OnPremise)', destinations });
 });
 
 // --- Hot/Cold pilot routes -------------------------------------------------

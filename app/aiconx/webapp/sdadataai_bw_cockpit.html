@@ -723,9 +723,11 @@ function renderPi8Banner(){
     return;
   }
   if(pi8Status.reachable){
-    const dests = Object.entries(pi8Status.destinations).map(([k,v])=>k+': HTTP '+(v.status||'—')).join(', ');
+    const live = (OBJ_CACHE['pi8objects']||[]).some(o=>o.live);
     el.className='live-banner live';
-    el.innerHTML = `<i class="fa-solid fa-circle" style="font-size:8px;color:#2ecc71;"></i> LIVE — MCP reached PI8 (PJ2) through Cloud Connector (${dests}). Non-BW source proven. Object list below is demo data pending a real ESR enumeration API.`;
+    el.innerHTML = live
+      ? `<i class="fa-solid fa-circle" style="font-size:8px;color:#2ecc71;"></i> LIVE — MCP reached PI8 (PJ2) through Cloud Connector. Object list below is real ESR content (/rep/support/SimpleQuery), not demo data.`
+      : `<i class="fa-solid fa-circle" style="font-size:8px;color:#2ecc71;"></i> LIVE — MCP reached PI8 (PJ2) through Cloud Connector. Non-BW source proven. Object list below is still demo data (click Connect &amp; Browse Objects with PI8 selected to load the real ESR catalog).`;
   } else {
     el.className='live-banner error';
     el.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> PI8 not reachable (${pi8Status.error}) — check the Destination/Cloud Connector mapping.`;
@@ -872,18 +874,44 @@ async function doConnect(){
   goStep(2);
 }
 
+// Real ESR object enumeration -- found empirically against the live PJ2
+// system (Cloud Connector's Resources ACL allowlists /rep/support/
+// SimpleQuery, the classic ESR query servlet). bw-rfc-server's /api/pi8/
+// objects POSTs it and parses the real results table -- not mock data.
+async function fetchPi8Objects(){
+  const res = await fetch(BW_API_BASE + '/api/pi8/objects');
+  const data = await res.json();
+  if(!res.ok || !data.verified) throw new Error(data.error || ('HTTP '+res.status));
+  OBJ_CACHE['pi8objects'] = (data.items||[]).map(o => ({
+    id: o.name, name: o.name,
+    desc: o.namespace + ' — ' + o.swcv,
+    root: 'PI8', artifactType: o.typeLabel,
+    isCustom: o.isCustom, complexity: COMPLEXITY[hashStr(o.name)%3],
+    live: true
+  }));
+  return {count: OBJ_CACHE['pi8objects'].length, totalCount: data.totalCount};
+}
+
 async function doConnectPi8(){
   const btn = document.querySelector('.connect-wrap .btn-primary');
   if(btn){ btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connecting to PI8...'; }
   toast('Connecting to PI8 (PJ2)...', 'gold');
-  OBJ_CACHE['pi8objects'] = buildMockObjects('pi8objects');
-  await checkPi8Live();
-  if(pi8Status.reachable){
-    liveStatus = {connected:true, cubeCount:0, sysid:'PI8', error:'', typeCounts:{pi8objects:PI8_OBJECTS.length}, typeErrors:{}};
-    toast('Connected to PI8 (PJ2) — non-BW source reachable via Cloud Connector.','green');
+  let objCount = 0, totalCount = 0, connected = false, connErr = '';
+  try {
+    const r = await fetchPi8Objects();
+    objCount = r.count; totalCount = r.totalCount;
+    connected = true;
+  } catch(err){
+    connErr = err.message||String(err);
+    OBJ_CACHE['pi8objects'] = buildMockObjects('pi8objects');
+  }
+  pi8Status = {checked:true, reachable:connected, destinations:{}, error:connErr};
+  if(connected){
+    liveStatus = {connected:true, cubeCount:0, sysid:'PI8', error:'', typeCounts:{pi8objects:objCount}, typeErrors:{}};
+    toast('Connected to PI8 (PJ2) — '+totalCount+' real ESR objects found live ('+objCount+' shown).','green');
   } else {
-    liveStatus = {connected:false, cubeCount:0, sysid:'PI8', error:pi8Status.error||'unreachable', typeCounts:{}, typeErrors:{}};
-    toast('PI8 connection failed ('+(pi8Status.error||'unreachable')+').','red');
+    liveStatus = {connected:false, cubeCount:0, sysid:'PI8', error:connErr||'unreachable', typeCounts:{}, typeErrors:{}};
+    toast('PI8 object enumeration failed ('+connErr+') — showing demo data.','red');
   }
   if(btn){ btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plug"></i> Connect &amp; Browse Objects'; }
   renderLiveBanner();

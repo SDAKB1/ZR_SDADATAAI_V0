@@ -491,6 +491,91 @@ app.get('/api/pi8/ping', async (req, res) => {
   res.json({ reachable, system: 'PI8', systemname: 'PJ2', via: 'Cloud Connector (OnPremise)', destinations });
 });
 
+// --- Real ESR object enumeration, found empirically against the live PJ2 ---
+// system: the Cloud Connector's Resources ACL for nwjava.consultsda.com:443
+// allowlists /rep/support/SimpleQuery (among the *InService SOAP Directory
+// APIs and a few others) -- it's the classic ESR "SimpleQuery" servlet, an
+// HTML form normally driven from a browser. POSTing it directly with a
+// fixed set of object types returns a real HTML results table (verified
+// live: 243 real objects, including genuine custom content under this org's
+// own software component versions like SWC_S4H_ORDER_2_CASH_IN, not just
+// SAP's demo objects). Each result row's "R" (raw) link encodes TYPE/KEY/
+// SWCGUID as query params -- far more reliable to parse than the free-text
+// label column, so that's what gets parsed out, not the HTML text.
+const PI8_QUERY_TYPES = {
+  ifmmessif: 'Service Interface',
+  MAPPING: 'Operation Mapping',
+  XI_TRAFO: 'Message Mapping',
+  ChannelTemplate: 'Communication Channel Template',
+  RepBProcess: 'Integration Process'
+};
+
+function buildSimpleQueryBody() {
+  const params = new URLSearchParams();
+  params.append('qc', 'All software components');
+  params.append('underL', 'true');
+  params.append('changeL', 'true');
+  params.append('userL', 'SDAINT');
+  params.append('syncTabL', 'true');
+  params.append('deletedL', 'N');
+  params.append('xmlReleaseL', '7.1');
+  Object.keys(PI8_QUERY_TYPES).forEach((t) => params.append('types', t));
+  params.append('result', 'RA_XILINK');
+  params.append('action', 'Start query');
+  return params.toString();
+}
+
+function parseSimpleQueryResults(html) {
+  const rowRe = /<td>\s*([\s\S]*?)<\/td><td>([^<]*)<\/td><td><a target="_blank" href="([^"]+)">R<\/a><\/td>/g;
+  const items = [];
+  let m;
+  while ((m = rowRe.exec(html)) !== null) {
+    const swcv = m[2].trim();
+    const href = m[3].replace(/&amp;/g, '&');
+    const qIdx = href.indexOf('?');
+    if (qIdx === -1) continue;
+    const qs = new URLSearchParams(href.slice(qIdx + 1));
+    const type = qs.get('TYPE') || '';
+    let key = qs.get('KEY') || '';
+    try { key = decodeURIComponent(key); } catch (e) { /* use raw */ }
+    const [name, namespace] = key.split('|');
+    items.push({
+      type,
+      typeLabel: PI8_QUERY_TYPES[type] || type,
+      name: name || key,
+      namespace: namespace || '',
+      swcv,
+      isCustom: !swcv.includes('SAP BASIS')
+    });
+  }
+  return items;
+}
+
+app.get('/api/pi8/objects', async (req, res) => {
+  try {
+    const response = await executeHttpRequest(
+      { destinationName: 'PO_PJ2_ESR' },
+      {
+        method: 'post',
+        url: '/rep/support/SimpleQuery',
+        data: buildSimpleQueryBody(),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 20000
+      }
+    );
+    const html = String(response.data);
+    const countMatch = html.match(/Amount of objects:\s*(\d+)/);
+    const totalCount = countMatch ? parseInt(countMatch[1], 10) : null;
+    const items = parseSimpleQueryResults(html).sort((a, b) => b.isCustom - a.isCustom);
+    res.json({ verified: true, totalCount, returned: Math.min(items.length, 150), items: items.slice(0, 150) });
+  } catch (err) {
+    if (err.response) {
+      return res.status(502).json({ verified: false, error: 'HTTP ' + err.response.status, items: [] });
+    }
+    res.status(502).json({ verified: false, error: err.message || String(err), items: [] });
+  }
+});
+
 // --- Hot/Cold pilot routes -------------------------------------------------
 
 app.get('/api/data/0d_nw_c01/pull', async (req, res) => {
